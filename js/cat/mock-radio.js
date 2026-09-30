@@ -24,6 +24,7 @@ export class MockRadioTransport {
       AG: [128, 100], RG: [255, 255], SQ: [0, 0], GT: [4, 4], PA: [1, 0, 0], RA: 0,
       SH: [17, 16], IS: [0, 0], NL: [0, 0], RL: [0, 0], BC: [0, 0],
       BP: [[0, 100], [0, 100]], CO: [[0, 1000, 0, 25], [0, 1000, 0, 25]], NA: [0, 0],
+      CT: [0, 0], CN: [[12, 0], [12, 0]],
       TX: 0, PC: ['2', 50], MG: 50, PR: 0, PL: 50, AO: 50, VX: 0, VG: 50, ML: 50,
       KS: 20, KP: 30, AC: '000', AI: 0,
     };
@@ -87,6 +88,12 @@ export class MockRadioTransport {
         if (a.length === 6) { s.CO[v][fn] = +a.slice(2); return null; }
         return `CO${v}${fn}${p4(s.CO[v][fn])};`;
       }
+      case 'CT': if (a.length === 2) { if (+a[1] > 5) return '?;'; s.CT[v] = +a[1]; return null; } return `CT${v}${s.CT[v]};`;
+      case 'CN': {
+        const kind = +a[1]; // 0 CTCSS, 1 DCS
+        if (a.length === 5) { const i = +a.slice(2); if (i > (kind ? 103 : 49)) return '?;'; s.CN[v][kind] = i; return null; }
+        return `CN${v}${kind}${p3(s.CN[v][kind])};`;
+      }
       case 'TX': if (a) { s.TX = +a; return null; } return `TX${s.TX};`;
       case 'PC': {
         // Out-of-range power is refused, as on the radio: 50 W on VHF/UHF for
@@ -129,9 +136,6 @@ export class MockRadioTransport {
       }
       // Like the real radio: SM only answers for MAIN; RM1/RM2 work for both.
       case 'SM': return v ? null : `SM0${p3(this._sMeter(0))};`;
-      // MAIN's squelch (P8) is open while its SQL setting is at or below 40.
-      // Like the real radio, RI1 gets no answer.
-      case 'RI': return v ? null : `RI0000000${s.SQ[0] <= 40 ? 1 : 0};`;
       case 'RM': return `RM${a[0]}${p3(this._meter(+a[0]))}000;`;
       // Commands the real FTX-1 rejects (see notes): answer like the radio does.
       case 'NB': case 'NR': case 'BS': case 'ST': return '?;';

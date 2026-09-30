@@ -10,7 +10,6 @@ const TUNE_GAP_MS = 150;   // how long to wait for "?;" after a tuner command
 const TUNE_MAX_MS = 90000; // stop showing TUNING after this, whatever the radio reports
 const TUNE_QUIET_POLLS = 4;      // PO reads of zero in a row that mean the tuning carrier has gone
 const TUNE_NO_CARRIER_MS = 3000; // give up waiting for a carrier that never appears
-const RI_GIVE_UP = 3;            // unanswered RI0 reads in a row before it stops being asked
 const AUTO_TUNE_MOVE_HZ = 10000; // auto tune again once this far from the last tuned frequency
 const TX_POLL_METERS = ['PO', 'SWR', 'ALC'];
 
@@ -21,11 +20,11 @@ export function initialState() {
     freqA: 14250000, freqB: 7074000, modeA: 'USB', modeB: 'DATA-U',
     active: 0, split: false, dual: true,
     tx: false, tuning: false, tunerType: null, autoTune: false, autoTuneDelayS: 3,
-    sqlOpen: null, // MAIN's squelch is open; null = not known
     sRaw: 0, sRawB: 0, poRaw: 0, swrRaw: 0, alcRaw: 0,
     af: 128, rf: 255, sql: 0, agc: 4, preamp: 1, att: false,
     width: 17, shift: 0, nb: 0, nr: 0, dnf: false, notch: false, notchHz: 1000,
     contour: false, contourHz: 1000, narrow: false,
+    sqlType: 0, toneIdx: 12, dcsIdx: 0, // tone squelch: CT type, CN indexes into CTCSS_TONES / DCS_CODES
     power: 50, mic: 50, proc: false, procLevel: 50, amc: 50, vox: false, voxGain: 50, mon: 50,
     keySpeed: 20, keyPitch: 600,
     txTimeoutS: 180, txStartedAt: 0, license: 'general',
@@ -49,8 +48,6 @@ export class RadioService extends EventTarget {
     this._autoRef = null;  // transmit frequency the tuner was last run on (or assumed good)
     this._autoFreq = null; // transmit frequency at the last check, and when it got there
     this._autoSince = 0;
-    this._riFails = 0;         // RI0 reads in a row that went unanswered
-    this._riSeenOpen = false;  // whether RI0 has reported the squelch open since connecting
     this.traffic = [];     // last CAT lines, for the diagnostics panel
   }
 
@@ -115,8 +112,6 @@ export class RadioService extends EventTarget {
     await this.link.set(cmd.ai(false));
 
     this._autoRef = null; // wherever the radio is when we connect counts as already tuned
-    this._riFails = 0;
-    this._riSeenOpen = false;
     this._patch({ connected: true, connecting: false, radioId: id, warning, linkLabel: transport.label });
     await this.readAll();
     this._startLoop();
@@ -129,7 +124,7 @@ export class RadioService extends EventTarget {
     const t = this.transport;
     this.link = null; this.transport = null;
     if (t) { t.onClose = () => {}; await t.close().catch(() => {}); }
-    this._patch({ connected: false, connecting: false, demo: false, tx: false, tuning: false, sqlOpen: null, sRaw: 0, poRaw: 0, swrRaw: 0, alcRaw: 0 });
+    this._patch({ connected: false, connecting: false, demo: false, tx: false, tuning: false, sRaw: 0, poRaw: 0, swrRaw: 0, alcRaw: 0 });
   }
 
   _lost(reason) {
@@ -138,7 +133,7 @@ export class RadioService extends EventTarget {
     this.link?.close();
     this.link = null;
     clearTimeout(this._txWatchdog);
-    this._patch({ connected: false, tx: false, tuning: false, sqlOpen: null, warning: `Connection lost (${reason}).` });
+    this._patch({ connected: false, tx: false, tuning: false, warning: `Connection lost (${reason}).` });
   }
 
   // ---------------- polling ----------------
@@ -179,6 +174,9 @@ export class RadioService extends EventTarget {
       async () => { const r = parse.sub(await q(`CO${v()}0;`), 'CO'); this._poll('contour', r ? r.value === 1 : null); },
       async () => { const r = parse.sub(await q(`CO${v()}1;`), 'CO'); this._poll('contourHz', r ? r.value : null); },
       async () => this._poll('narrow', parse.flag(await q(`NA${v()};`), 'NA')),
+      async () => this._poll('sqlType', parse.sqlType(await q(`CT${v()};`))),
+      async () => this._poll('toneIdx', parse.toneCode(await q(`CN${v()}0;`))?.index ?? null),
+      async () => this._poll('dcsIdx', parse.toneCode(await q(`CN${v()}1;`))?.index ?? null),
       async () => this._applyPower(parse.power(await q('PC;'))),
       async () => this._poll('mic', parse.plain(await q('MG;'), 'MG')),
       async () => this._poll('proc', parse.flag(await q('PR0;'), 'PR')),
@@ -213,27 +211,11 @@ export class RadioService extends EventTarget {
       if (this.state.poRaw || this.state.swrRaw || this.state.alcRaw) {
         Object.assign(this.state, { poRaw: 0, swrRaw: 0, alcRaw: 0 });
       }
-      const open = await this._readSquelch();
-      if (open !== this.state.sqlOpen) { this.state.sqlOpen = open; this._emit(); } // straight away: the PC audio follows it
     }
     if (this.state.tuning) {
       const t = parse.tuning(await L.read('AC;'));
       if (t === false || this._tuneOver()) this._poll('tuning', false);
     }
-  }
-
-  // Whether the squelch is open, from P8 of RI0, or null if that isn't known.
-  // The radio only reports MAIN's squelch (RI1 gets no answer), so it's only
-  // known with MAIN selected in single receive; SUB's audio is never muted.
-  async _readSquelch() {
-    if (this.rx !== 0 || this.state.dual || this._riFails >= RI_GIVE_UP) return null;
-    const info = parse.radioInfo(await this.link?.read('RI0;'));
-    if (!info) { this._riFails++; return null; }
-    this._riFails = 0;
-    // "Closed" is only believed once "open" has been seen: a radio that
-    // always said closed would otherwise mute the PC for good.
-    if (info.sqlOpen) this._riSeenOpen = true; else if (!this._riSeenOpen) return null;
-    return info.sqlOpen;
   }
 
   // AC; can't be relied on to say a tune has finished: it keeps reporting the
@@ -333,6 +315,9 @@ export class RadioService extends EventTarget {
   setNotchHz(hz) { return this._set(cmd.notchFreq(this.rx, hz), 'notchHz', { notchHz: Math.round(hz / 10) * 10 }); }
   setContour(on) { return this._set(cmd.contour(this.rx, on), 'contour', { contour: on }); }
   setContourHz(hz) { return this._set(cmd.contourFreq(this.rx, hz), 'contourHz', { contourHz: Math.round(hz) }); }
+  setSqlType(n) { return this._set(cmd.sqlType(this.rx, n), 'sqlType', { sqlType: n }); }
+  setToneIdx(i) { return this._set(cmd.ctcssTone(this.rx, i), 'toneIdx', { toneIdx: i }); }
+  setDcsIdx(i) { return this._set(cmd.dcsCode(this.rx, i), 'dcsIdx', { dcsIdx: i }); }
   setNarrow(on) { return this._set(cmd.narrow(this.rx, on), 'narrow', { narrow: on }); }
 
   setPower(w) {

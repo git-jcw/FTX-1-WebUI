@@ -59,13 +59,18 @@ FTX Deck calls MAIN "VFO A" and SUB "VFO B" in the UI.
 | Contour freq | `CO01nnnn;` | 0010–3200 Hz |
 | APF on/off | `CO02nnnn;` | CW only |
 | Narrow | `NA0n;` | 0/1 |
+| Squelch type | `CT0n;` | 0 OFF, 1 ENC, 2 TSQ, 3 DCS, 4 PR FREQ, 5 REV TONE. The IF/OI answer lists ENC and TSQ the other way round; **verify** |
+| CTCSS tone | `CN00nnn;` | 000–049, 67.0–254.1 Hz (standard 50-tone table) |
+| DCS code | `CN01nnn;` | 000–103, codes 023–754 |
 
 Squelch state: `RI0;` → `RI` + eight digits P1–P8, P8 `1` = squelch open (BUSY),
-`0` = closed. Seen on hardware with MAIN selected: `RI00000000;` squelched,
-`RI00000001;` with the squelch opened. `RI1;` gets no answer, so SUB's squelch
-can't be read. The USB receive audio is not muted by the squelch, so FTX Deck
-polls `RI0;` and silences the PC speakers while MAIN's squelch is closed (MAIN
-selected, single receive only), and only after it has seen it open once.
+`0` = closed. Seen on hardware on 2 m FM with MAIN selected: `RI00000000;`
+squelched, `RI00000001;` with the squelch opened. `RI1;` gets no answer.
+
+The USB receive audio is not muted by the radio's squelch. FTX Deck tried
+silencing the PC speakers from P8, but on 20 m USB it stayed muted with a
+signal plainly present, so P8 isn't a usable "audio is present" signal outside
+FM. FTX Deck no longer uses `RI`; the PC always plays the USB audio.
 
 The `NB0x`/`NR0x` on/off commands used on other Yaesu rigs answer `?;` on the FTX-1;
 on/off is done with the level commands above.

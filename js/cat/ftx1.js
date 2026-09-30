@@ -12,7 +12,9 @@ export const MODE_CODES = {
 };
 export const CODE_TO_MODE = Object.fromEntries(Object.entries(MODE_CODES).map(([k, v]) => [v, k]));
 
-// Width tables, index = SH code (0 = radio default).
+// Width tables, index = SH code (0 = radio default). Values as listed for the
+// NAR WIDTH menu items in Yaesu's FTX-1 CAT manual (2508-C); Hamlib's FTX-1
+// backend uses the same values.
 export const SSB_WIDTHS = [null, 300, 400, 600, 850, 1100, 1200, 1500, 1650, 1800, 1950, 2100,
   2250, 2400, 2450, 2500, 2600, 2700, 2800, 2900, 3000, 3200, 3500, 4000];
 export const NARROW_WIDTHS = [null, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 800,
@@ -22,6 +24,22 @@ export const AGC_NAMES = ['OFF', 'FAST', 'MID', 'SLOW', 'AUTO', 'AUTO', 'AUTO'];
 export const PREAMP_NAMES_HF = ['IPO', 'AMP1', 'AMP2'];
 
 export const METER = { MAIN_S: 1, SUB_S: 2, COMP: 3, ALC: 4, PO: 5, SWR: 6, ID: 7, VDD: 8 };
+
+// Squelch type (CT P2) and the tone / code tables CN indexes into.
+export const SQL_TYPES = ['OFF', 'ENC', 'TSQ', 'DCS', 'PR FREQ', 'REV TONE'];
+export const SQL_TYPE = { OFF: 0, ENC: 1, TSQ: 2, DCS: 3, PR_FREQ: 4, REV_TONE: 5 };
+export const CTCSS_TONES = [67.0, 69.3, 71.9, 74.4, 77.0, 79.7, 82.5, 85.4, 88.5, 91.5, 94.8, 97.4,
+  100.0, 103.5, 107.2, 110.9, 114.8, 118.8, 123.0, 127.3, 131.8, 136.5, 141.3, 146.2, 151.4, 156.7,
+  159.8, 162.2, 165.5, 167.9, 171.3, 173.8, 177.3, 179.9, 183.5, 186.2, 189.9, 192.8, 196.6, 199.5,
+  203.5, 206.5, 210.7, 218.1, 225.7, 229.1, 233.6, 241.8, 250.3, 254.1];
+export const DCS_CODES = ['023', '025', '026', '031', '032', '036', '043', '047', '051', '053', '054',
+  '065', '071', '072', '073', '074', '114', '115', '116', '122', '125', '131', '132', '134', '143', '145',
+  '152', '155', '156', '162', '165', '172', '174', '205', '212', '223', '225', '226', '243', '244', '245',
+  '246', '251', '252', '255', '261', '263', '265', '266', '271', '274', '306', '311', '315', '325', '331',
+  '332', '343', '346', '351', '356', '364', '365', '371', '411', '412', '413', '423', '431', '432', '445',
+  '446', '452', '454', '455', '462', '464', '465', '466', '503', '506', '516', '523', '526', '532', '546',
+  '565', '606', '612', '624', '627', '631', '632', '654', '662', '664', '703', '712', '723', '731', '732',
+  '734', '743', '754'];
 
 // Tuner type of an antenna port, as stored in the radio menu (TUNER TYPE SEL).
 export const TUNER = { INT: 0, INT_FAST: 1, EXT: 2, ATAS: 3 };
@@ -99,8 +117,8 @@ export function splitReplies(buffer) {
 // Commands with a MAIN/SUB or sub-function digit are keyed with it so
 // concurrent reads of the same opcode don't cross.
 const KEYED_BY_DIGIT = new Set(['AG', 'RG', 'SQ', 'MD', 'SM', 'SH', 'IS', 'NL', 'RL', 'BC',
-  'GT', 'PA', 'RA', 'PR', 'ML', 'NA', 'RM']);
-const KEYED_BY_TWO = new Set(['BP', 'CO']);
+  'GT', 'PA', 'RA', 'PR', 'ML', 'NA', 'RM', 'CT']);
+const KEYED_BY_TWO = new Set(['BP', 'CO', 'CN']);
 export function replyKey(text) {
   const op = text.slice(0, 2);
   if (op === 'EX') return text.slice(0, 8); // menu item: EX + group, section, item
@@ -160,6 +178,9 @@ export const cmd = {
   voxGain: n => `VG${pad(clamp(n, 0, 100), 3)};`,
   monitorLevel: n => `ML0${pad(clamp(n, 0, 100), 3)};`,
   readMenu: item => `EX${item};`,
+  sqlType: (v, n) => `CT${vfo(v)}${clamp(n, 0, SQL_TYPES.length - 1)};`,
+  ctcssTone: (v, i) => `CN${vfo(v)}0${pad(clamp(i, 0, CTCSS_TONES.length - 1), 3)};`,
+  dcsCode: (v, i) => `CN${vfo(v)}1${pad(clamp(i, 0, DCS_CODES.length - 1), 3)};`,
   keySpeed: wpm => `KS${pad(clamp(wpm, 4, 60), 3)};`,
   keyPitch: hz => `KP${pad(clamp(Math.round((hz - 300) / 10), 0, 75), 2)};`,
   readMeter: n => `RM${n};`,
@@ -205,11 +226,9 @@ export const parse = {
   },
   txVfo: r => { const b = body(r, 'FT'); return b ? int(b) : null; },
   tuning: r => { const b = body(r, 'AC'); return b && b.length === 3 ? b[2] !== '0' : null; },
-  // RI reply: eight status digits P1..P8 (the receiver asked about isn't echoed).
-  radioInfo: r => {
-    const b = body(r, 'RI');
-    return b && /^\d{8}/.test(b) ? { tuning: b[5] === '1', sqlOpen: b[7] === '1' } : null;
-  },
+  sqlType: r => { const b = body(r, 'CT'); const n = b && b.length === 2 ? int(b[1]) : null; return n != null && n < SQL_TYPES.length ? n : null; },
+  // CN reply: P1 receiver, P2 0 CTCSS / 1 DCS, then the table index
+  toneCode: r => { const b = body(r, 'CN'); return b && b.length === 5 ? { dcs: b[1] === '1', index: int(b.slice(2)) } : null; },
   menu: r => { const b = body(r, 'EX'); return b && b.length > 6 ? int(b.slice(6)) : null; },
   keyPitch: r => { const n = int(body(r, 'KP')); return n == null ? null : 300 + n * 10; },
 };

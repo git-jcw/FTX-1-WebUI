@@ -3,12 +3,14 @@
 import { RadioService } from './radio.js';
 import { WebSerialTransport } from './cat/transport.js';
 import { MockRadioTransport } from './cat/mock-radio.js';
-import { BANDS, bandForFreq, bandDefault, widthTable, AGC_NAMES, PREAMP_NAMES_HF, preampBandType } from './cat/ftx1.js';
+import { BANDS, bandForFreq, bandDefault, widthTable, AGC_NAMES, PREAMP_NAMES_HF, preampBandType,
+  SQL_TYPE, CTCSS_TONES, DCS_CODES } from './cat/ftx1.js';
 import { AudioEngine } from './audio/audio-engine.js';
 import { ArcMeter } from './ui/meters.js';
 import { SpectrumWaterfall, Oscilloscope, PassbandView } from './ui/scope.js';
 import { renderFreq, parseFreqInput, formatFreqShort } from './ui/vfo.js';
 import { TuningDial } from './ui/dial.js';
+import { THEMES, applyTheme } from './ui/theme.js';
 
 const $ = id => document.getElementById(id);
 const radio = new RadioService();
@@ -17,9 +19,10 @@ window.ftx = { radio, audio }; // handy from the browser console
 
 // ---------------- settings (per browser) ----------------
 const SETTINGS_KEY = 'ftxdeck.settings.v1';
-const settings = Object.assign({ baud: 38400, tot: 180, license: 'general', spacePtt: false, latchPtt: false, autoTune: false, autoTuneDelay: 3, step: 100, vfoView: 'auto', span: 8000, floor: -112, range: 62, speed: 2 },
+const settings = Object.assign({ baud: 38400, tot: 180, license: 'general', spacePtt: false, latchPtt: false, theme: 'shack', autoTune: false, autoTuneDelay: 3, step: 100, vfoView: 'auto', span: 8000, floor: -112, range: 62, speed: 2 },
   (() => { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch { return {}; } })());
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* ignore */ } };
+settings.theme = applyTheme(settings.theme);
 radio.state.txTimeoutS = settings.tot;
 radio.state.license = settings.license;
 radio.state.autoTune = settings.autoTune;
@@ -42,7 +45,7 @@ function banner(text, { error = false } = {}) {
 $('btnConnect').onclick = async () => {
   if (radio.state.connected && !radio.state.demo) { await radio.disconnect(); await stopAllAudio(); return; }
   if (!WebSerialTransport.supported()) {
-    banner('This browser can\'t reach USB serial ports. Use Chrome or Edge on Windows, macOS or Linux, opened from http://localhost.', { error: true });
+    banner('This browser can\'t reach USB serial ports. Use Chrome or Edge on Windows, macOS or Linux.', { error: true });
     return;
   }
   try {
@@ -167,6 +170,26 @@ for (const m of UI_MODES) {
   modeBox.append(btn);
 }
 
+// ---------------- FM tone squelch ----------------
+const SQL_TYPE_LABEL = ['Off', 'Tone (ENC)', 'Tone squelch (TSQ)', 'DCS', 'PR freq', 'Reverse tone'];
+const fillOptions = (id, labels) => { for (const [i, l] of labels.entries()) $(id).append(new Option(l, String(i))); };
+fillOptions('selSqlType', SQL_TYPE_LABEL);
+fillOptions('selTone', CTCSS_TONES.map(f => `${f.toFixed(1)} Hz`));
+fillOptions('selDcs', DCS_CODES.map(c => `D${c}`));
+$('selSqlType').onchange = e => radio.setSqlType(+e.target.value);
+$('selTone').onchange = e => radio.setToneIdx(+e.target.value);
+$('selDcs').onchange = e => radio.setDcsIdx(+e.target.value);
+const isFm = mode => /^(FM|FM-N|DATA-FM|DATA-FM-N)$/.test(mode);
+function refreshTone() {
+  const s = radio.state;
+  $('toneRow').hidden = !isFm(radio.activeMode);
+  $('selTone').hidden = ![SQL_TYPE.ENC, SQL_TYPE.TSQ, SQL_TYPE.REV_TONE].includes(s.sqlType);
+  $('selDcs').hidden = s.sqlType !== SQL_TYPE.DCS;
+  for (const [id, v] of [['selSqlType', s.sqlType], ['selTone', s.toneIdx], ['selDcs', s.dcsIdx]]) {
+    if (document.activeElement !== $(id) && v != null) $(id).value = String(v);
+  }
+}
+
 // ---------------- sliders & toggles ----------------
 // bind(rangeId, outId, getter, setter, fmt): keeps a slider in sync with state
 // without fighting the user while they drag.
@@ -239,12 +262,14 @@ function refreshPreampSeg() {
   const bt = preampBandType(radio.activeFreq);
   if (bt === preBandType) return;
   preBandType = bt;
-  segmented('segPre', bt === 0 ? PREAMP_NAMES_HF.map((n, i) => [i, n]) : [[0, 'PRE OFF'], [1, 'PRE ON']],
+  // HF/50 MHz: IPO / AMP1 / AMP2. 144/430 MHz have a single preamp, on or off.
+  segmented('segPre', bt === 0 ? PREAMP_NAMES_HF.map((n, i) => [i, n]) : [[1, 'ON'], [0, 'OFF']],
     () => S().preamp, v => radio.setPreamp(v));
 }
 
 bind('rPower', 'oPower', () => S().power, v => radio.setPower(v), v => `${v} W`);
 bind('rMic', 'oMic', () => S().mic, v => radio.setMic(v));
+bind('rAmc', 'oAmc', () => S().amc, v => radio.setAmc(v));
 bind('rProc', 'oProc', () => S().procLevel, v => radio.setProcLevel(v));
 toggle('tProc', () => S().proc, v => radio.setProc(v));
 toggle('tVox', () => S().vox, v => radio.setVox(v));
@@ -309,10 +334,7 @@ window.addEventListener('keyup', e => {
 });
 radio.addEventListener('change', () => {
   // If the radio stops transmitting on its own (timeout, disconnect), close the mic gate too.
-  if (!radio.state.tx && audio.state.txActive) audio.setTxActive(false);
-  // PC speakers follow the radio's squelch (unknown counts as open).
-  audio.setSquelched(radio.state.connected && radio.state.sqlOpen === false);
-});
+  if (!radio.state.tx && audio.state.txActive) audio.setTxActive(false);});
 
 $('btnTune').onclick = () => radio.tune();
 toggle('tAutoTune', () => S().autoTune, on => { settings.autoTune = on; saveSettings(); radio.setAutoTune(on); });
@@ -334,6 +356,7 @@ function fillAudioSelects() {
   fillSelect($('setMic'), a.inputs, a.mic);
 }
 $('btnSettings').onclick = () => {
+  $('setTheme').value = settings.theme;
   $('setBaud').value = String(settings.baud);
   $('setTot').value = String(settings.tot);
   $('setLicense').value = settings.license;
@@ -343,6 +366,12 @@ $('btnSettings').onclick = () => {
   $('dlgSettings').showModal();
 };
 $('btnListDevices').onclick = async () => { await audio.refreshDevices({ askPermission: true }); fillAudioSelects(); };
+for (const t of THEMES) $('setTheme').append(new Option(t.name, t.id));
+$('setTheme').onchange = e => {
+  settings.theme = applyTheme(e.target.value);
+  scope.clear(); // the waterfall history was drawn in the old colours
+  saveSettings(); update();
+};
 $('setBaud').onchange = e => { settings.baud = +e.target.value; saveSettings(); };
 $('setTot').onchange = e => { settings.tot = +e.target.value; radio.state.txTimeoutS = settings.tot; saveSettings(); };
 $('setLicense').onchange = e => { settings.license = radio.state.license = e.target.value; saveSettings(); update(); };
@@ -431,12 +460,7 @@ function update() {
     const band = bandForFreq(f);
     el.querySelector('.vfo-info').textContent = band ? `${band.label}${/^\d+$/.test(band.label) ? ' m' : ''}` : 'GEN';
     const txOnThis = s.split ? v === 1 : v === s.active;
-    const rxTag = el.querySelector('.tag-rx');
-    rxTag.classList.toggle('on', v === s.active || (s.split && v === 0));
-    // MAIN's RX tag reads SQL while the radio reports its squelch closed (PC audio is muted then)
-    const squelched = v === 0 && s.sqlOpen === false;
-    rxTag.classList.toggle('sql-closed', squelched);
-    rxTag.textContent = squelched ? 'SQL' : 'RX';
+    el.querySelector('.tag-rx').classList.toggle('on', v === s.active || (s.split && v === 0));
     const tx = el.querySelector('.tag-tx');
     tx.classList.toggle('on', txOnThis);
     tx.classList.toggle('live', txOnThis && s.tx);
@@ -454,6 +478,7 @@ function update() {
     b.title = voice ? '' : `No SSB voice privileges here for ${LICENSE_LABEL[s.license] || 'this license'}; tunes to the band's general default`;
   }
   for (const b of modeBox.children) b.classList.toggle('active', b.dataset.mode === radio.activeMode);
+  refreshTone();
 
   // width slider range follows the mode's table
   const t = currentWidthTable();
@@ -505,6 +530,3 @@ function frame(now) {
 
 update();
 requestAnimationFrame(frame);
-
-// Opened as a file? Modules won't load that way, but if they somehow did, say so.
-if (location.protocol === 'file:') banner('Open FTX Deck from http://localhost (see README) — browsers block USB serial and modules on file:// pages.', { error: true });

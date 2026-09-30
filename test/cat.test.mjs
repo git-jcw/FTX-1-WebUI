@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cmd, parse, calibrate, splitReplies, replyKey, widthTable, bandForFreq, bandDefault, BANDS,
-  MENU, TUNER, tuneCommands, powerLimits } from '../js/cat/ftx1.js';
+  MENU, TUNER, tuneCommands, powerLimits, SQL_TYPE, CTCSS_TONES, DCS_CODES } from '../js/cat/ftx1.js';
 import { MockRadioTransport } from '../js/cat/mock-radio.js';
 import { CatLink } from '../js/cat/cat-link.js';
 import { RadioService } from '../js/radio.js';
@@ -283,45 +283,27 @@ test('TUNING clears when the radio finishes, though AC; still says the tuner is 
   await radio.disconnect();
 });
 
-test('squelch state is read from the radio', async () => {
-  const wait = ms => new Promise(r => setTimeout(r, ms));
-  assert.deepEqual(parse.radioInfo('RI00000001;'), { tuning: false, sqlOpen: true });
-  assert.deepEqual(parse.radioInfo('RI00000100;'), { tuning: true, sqlOpen: false });
-  assert.equal(parse.radioInfo('?;'), null);
+test('FM tone squelch commands', async () => {
+  assert.equal(cmd.sqlType(0, SQL_TYPE.TSQ), 'CT02;');
+  assert.equal(cmd.ctcssTone(0, CTCSS_TONES.indexOf(100)), 'CN00012;');
+  assert.equal(cmd.dcsCode(1, DCS_CODES.indexOf('754')), 'CN11103;');
+  assert.equal(parse.sqlType('CT03;'), SQL_TYPE.DCS);
+  assert.deepEqual(parse.toneCode('CN00012;'), { dcs: false, index: 12 });
+  assert.deepEqual(parse.toneCode('CN01103;'), { dcs: true, index: 103 });
+  assert.equal(replyKey('CN01103;'), 'CN01', 'CTCSS and DCS reads do not cross');
+  assert.equal(CTCSS_TONES.length, 50);
+  assert.equal(DCS_CODES.length, 104);
 
   const radio = new RadioService();
   const t = new MockRadioTransport({ latencyMs: 1 });
-  t.s.FR = 1; // single receive
+  t.s.CT[0] = 1; t.s.CN[0] = [18, 5];
   await radio.connect(t, { demo: true });
-  assert.equal(radio.state.sqlOpen, true);
-  await radio.setSql(80);
-  await wait(300);
-  assert.equal(radio.state.sqlOpen, false, 'closed once the squelch is turned up');
-  await radio.setSql(0);
-  await wait(300);
-  assert.equal(radio.state.sqlOpen, true, 'and open again when it is turned down');
-  await radio.setSql(80);
-  await wait(300);
-
-  await radio.selectVfo(1);
-  await wait(300);
-  assert.equal(radio.state.sqlOpen, null, 'SUB is unknown, not closed: the radio only reports MAIN');
-  await radio.selectVfo(0);
-  await wait(300);
-  assert.equal(radio.state.sqlOpen, false);
-  t.s.FR = 0;
-  await wait(2500);
-  assert.equal(radio.state.sqlOpen, null, 'unknown in dual receive too');
-  assert.ok(!t.log.includes('RI1;'), 'RI1 is never asked');
+  assert.deepEqual([radio.state.sqlType, radio.state.toneIdx, radio.state.dcsIdx], [1, 18, 5], 'read from the radio');
+  await radio.setSqlType(SQL_TYPE.TSQ);
+  await radio.setToneIdx(CTCSS_TONES.indexOf(146.2));
+  await radio.setDcsIdx(0);
+  assert.deepEqual([t.s.CT[0], t.s.CN[0]], [2, [23, 0]]);
   await radio.disconnect();
-
-  const stuck = new RadioService();
-  const t2 = new MockRadioTransport({ latencyMs: 1 });
-  t2.s.FR = 1; t2.s.SQ = [80, 80];
-  await stuck.connect(t2, { demo: true });
-  await wait(300);
-  assert.equal(stuck.state.sqlOpen, null, 'a receiver that has only ever said "closed" is not believed');
-  await stuck.disconnect();
 });
 
 test('power limits follow the head, band, mode and power source', async () => {

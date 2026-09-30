@@ -31,7 +31,7 @@ export class AudioEngine extends EventTarget {
       running: false, demo: false, error: null,
       inputs: [], outputs: [],
       radioIn: '', radioOut: '', speakers: '', mic: '',
-      volume: 0.7, txLevel: 0.8, txActive: false, muted: false, squelched: false,
+      volume: 0.7, txLevel: 0.8, txActive: false, muted: false,
     };
     this._load();
   }
@@ -65,7 +65,7 @@ export class AudioEngine extends EventTarget {
     this.analyser.minDecibels = -130;
     this.analyser.maxDecibels = -20;
     this.rxVolume = this.ctx.createGain();
-    this.rxVolume.gain.value = this.state.muted || this.state.squelched ? 0 : this.state.volume;
+    this.rxVolume.gain.value = this.state.muted ? 0 : this.state.volume;
     this.rxVolume.connect(this.ctx.destination);
     return this.ctx;
   }
@@ -140,16 +140,9 @@ export class AudioEngine extends EventTarget {
 
   setVolume(v) { this._patch({ volume: v }); this._applyVolume(); }
   setMuted(m) { this._patch({ muted: m }); this._applyVolume(); }
-  // The radio's USB audio carries the receiver even with its squelch closed,
-  // so the speakers are silenced here while it is. The waterfall still sees it.
-  setSquelched(closed) {
-    if (closed === this.state.squelched) return;
-    this.state.squelched = closed;
-    this._applyVolume();
-  }
   _applyVolume() {
     const s = this.state;
-    if (this.rxVolume) this.rxVolume.gain.setTargetAtTime(s.muted || s.squelched ? 0 : s.volume, this.ctx.currentTime, 0.02);
+    if (this.rxVolume) this.rxVolume.gain.setTargetAtTime(s.muted ? 0 : s.volume, this.ctx.currentTime, 0.02);
   }
 
   async setDevice(key, id) {
