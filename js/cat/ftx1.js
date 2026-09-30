@@ -1,0 +1,212 @@
+// FTX-1 CAT command builders and reply parsers.
+// Pure functions only — no I/O — so they can be unit-tested in Node.
+// See docs/FTX1-CAT-NOTES.md for the protocol reference.
+
+export const RADIO_ID = '0840';
+export const DEFAULT_BAUD = 38400;
+
+export const MODE_CODES = {
+  LSB: '1', USB: '2', 'CW-U': '3', FM: '4', AM: '5', 'RTTY-L': '6', 'CW-L': '7',
+  'DATA-L': '8', 'RTTY-U': '9', 'DATA-FM': 'A', 'FM-N': 'B', 'DATA-U': 'C',
+  'AM-N': 'D', PSK: 'E', 'DATA-FM-N': 'F', 'C4FM-DN': 'H', 'C4FM-VW': 'I',
+};
+export const CODE_TO_MODE = Object.fromEntries(Object.entries(MODE_CODES).map(([k, v]) => [v, k]));
+
+// Width tables, index = SH code (0 = radio default).
+export const SSB_WIDTHS = [null, 300, 400, 600, 850, 1100, 1200, 1500, 1650, 1800, 1950, 2100,
+  2250, 2400, 2450, 2500, 2600, 2700, 2800, 2900, 3000, 3200, 3500, 4000];
+export const NARROW_WIDTHS = [null, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 800,
+  1200, 1400, 1700, 2000, 2400, 3000, 3200, 3500, 4000];
+
+export const AGC_NAMES = ['OFF', 'FAST', 'MID', 'SLOW', 'AUTO', 'AUTO', 'AUTO'];
+export const PREAMP_NAMES_HF = ['IPO', 'AMP1', 'AMP2'];
+
+export const METER = { MAIN_S: 1, SUB_S: 2, COMP: 3, ALC: 4, PO: 5, SWR: 6, ID: 7, VDD: 8 };
+
+// Bands for the band buttons. `start`/`end` are the band edges used to
+// decide which band a frequency is in; `def` is the first-visit frequency.
+export const BANDS = [
+  { id: '160', label: '160', start: 1800000, end: 2000000, def: 1900000, mode: 'LSB' },
+  { id: '80', label: '80', start: 3500000, end: 4000000, def: 3750000, mode: 'LSB' },
+  { id: '60', label: '60', start: 5330000, end: 5410000, def: 5357000, mode: 'USB' },
+  { id: '40', label: '40', start: 7000000, end: 7300000, def: 7150000, mode: 'LSB' },
+  { id: '30', label: '30', start: 10100000, end: 10150000, def: 10136000, mode: 'DATA-U' },
+  { id: '20', label: '20', start: 14000000, end: 14350000, def: 14250000, mode: 'USB' },
+  { id: '17', label: '17', start: 18068000, end: 18168000, def: 18130000, mode: 'USB' },
+  { id: '15', label: '15', start: 21000000, end: 21450000, def: 21300000, mode: 'USB' },
+  { id: '12', label: '12', start: 24890000, end: 24990000, def: 24950000, mode: 'USB' },
+  { id: '10', label: '10', start: 28000000, end: 29700000, def: 28400000, mode: 'USB' },
+  { id: '6', label: '6', start: 50000000, end: 54000000, def: 50125000, mode: 'USB' },
+  { id: '2', label: '2', start: 144000000, end: 148000000, def: 146520000, mode: 'FM' },
+  { id: '70', label: '70cm', start: 420000000, end: 450000000, def: 446000000, mode: 'FM' },
+];
+
+export function bandForFreq(hz) {
+  return BANDS.find(b => hz >= b.start && hz <= b.end) || null;
+}
+
+// ---------- helpers ----------
+const pad = (n, w) => String(Math.max(0, Math.round(n))).padStart(w, '0');
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const vfo = v => (v === 1 || v === 'B' || v === 'SUB' ? '1' : '0');
+
+// Split "FA014250000;FB..." style stream text into complete replies.
+// Returns { replies: [...], rest: 'partial' }.
+export function splitReplies(buffer) {
+  const parts = buffer.split(';');
+  const rest = parts.pop();
+  return { replies: parts.filter(p => p.length).map(p => p + ';'), rest };
+}
+
+// The key a reply should be matched against (e.g. 'FA', 'SM0', 'RM5').
+// Commands with a MAIN/SUB or sub-function digit are keyed with it so
+// concurrent reads of the same opcode don't cross.
+const KEYED_BY_DIGIT = new Set(['AG', 'RG', 'SQ', 'MD', 'SM', 'SH', 'IS', 'NL', 'RL', 'BC',
+  'GT', 'PA', 'RA', 'PR', 'ML', 'NA', 'RM']);
+const KEYED_BY_TWO = new Set(['BP', 'CO']);
+export function replyKey(text) {
+  const op = text.slice(0, 2);
+  if (KEYED_BY_TWO.has(op)) return text.slice(0, 4);
+  if (KEYED_BY_DIGIT.has(op)) return text.slice(0, 3);
+  return op;
+}
+
+// ---------- builders (set) ----------
+export const cmd = {
+  id: () => 'ID;',
+  ai: on => `AI${on ? 1 : 0};`,
+  freq: (v, hz) => `F${vfo(v) === '1' ? 'B' : 'A'}${pad(hz, 9)};`,
+  readFreq: v => `F${vfo(v) === '1' ? 'B' : 'A'};`,
+  mode: (v, mode) => {
+    const code = MODE_CODES[mode];
+    if (!code) throw new Error(`Unknown mode ${mode}`);
+    return `MD${vfo(v)}${code};`;
+  },
+  readMode: v => `MD${vfo(v)};`,
+  vfoSelect: v => `VS${vfo(v)};`,
+  txVfo: v => `FT${vfo(v)};`,
+  aToB: () => 'AB;',
+  bToA: () => 'BA;',
+  swap: () => 'SV;',
+  afGain: (v, n) => `AG${vfo(v)}${pad(clamp(n, 0, 255), 3)};`,
+  rfGain: (v, n) => `RG${vfo(v)}${pad(clamp(n, 0, 255), 3)};`,
+  squelch: (v, n) => `SQ${vfo(v)}${pad(clamp(n, 0, 100), 3)};`,
+  agc: (v, n) => `GT${vfo(v)}${clamp(n, 0, 4)};`,
+  preamp: (bandType, n) => `PA${clamp(bandType, 0, 2)}${clamp(n, 0, 2)};`,
+  att: on => `RA0${on ? 1 : 0};`,
+  width: (v, code) => `SH${vfo(v)}0${pad(clamp(code, 0, 23), 2)};`,
+  ifShift: (v, hz) => {
+    const h = clamp(Math.round(hz / 20) * 20, -1200, 1200);
+    return `IS${vfo(v)}${h === 0 ? 0 : 1}${h < 0 ? '-' : '+'}${pad(Math.abs(h), 4)};`;
+  },
+  nbLevel: (v, n) => `NL${vfo(v)}${pad(clamp(n, 0, 10), 3)};`,
+  nrLevel: (v, n) => `RL${vfo(v)}${pad(clamp(n, 0, 10), 2)};`,
+  dnf: (v, on) => `BC${vfo(v)}${on ? 1 : 0};`,
+  notch: (v, on) => `BP${vfo(v)}0${on ? '001' : '000'};`,
+  notchFreq: (v, hz) => `BP${vfo(v)}1${pad(clamp(Math.round(hz / 10), 1, 320), 3)};`,
+  contour: (v, on) => `CO${vfo(v)}0${on ? '0001' : '0000'};`,
+  contourFreq: (v, hz) => `CO${vfo(v)}1${pad(clamp(hz, 10, 3200), 4)};`,
+  narrow: (v, on) => `NA${vfo(v)}${on ? 1 : 0};`,
+  ptt: on => `TX${on ? 1 : 0};`,
+  // Optima/SPA-1 uses P1=2 with whole watts; the Field head uses P1=1.
+  power: (head, watts) => {
+    if (head === 'optima') return `PC2${pad(clamp(watts, 5, 100), 3)};`;
+    const w = clamp(watts, 0.5, 10);
+    return Number.isInteger(w) ? `PC1${pad(w, 3)};` : `PC1${w.toFixed(1)};`;
+  },
+  micGain: n => `MG${pad(clamp(n, 0, 100), 3)};`,
+  proc: on => `PR0${on ? 1 : 0};`,
+  procLevel: n => `PL${pad(clamp(n, 0, 100), 3)};`,
+  amc: n => `AO${pad(clamp(n, 0, 100), 3)};`,
+  vox: on => `VX${on ? 1 : 0};`,
+  voxGain: n => `VG${pad(clamp(n, 0, 100), 3)};`,
+  monitorLevel: n => `ML0${pad(clamp(n, 0, 100), 3)};`,
+  tuneStart: () => 'AC003;',
+  tuneStop: () => 'AC000;',
+  keySpeed: wpm => `KS${pad(clamp(wpm, 4, 60), 3)};`,
+  keyPitch: hz => `KP${pad(clamp(Math.round((hz - 300) / 10), 0, 75), 2)};`,
+  readMeter: n => `RM${n};`,
+};
+
+// ---------- parsers ----------
+// Every parser takes a full reply like "FA014250000;" and returns a value,
+// or null if the reply isn't the expected shape.
+const body = (r, op) => (typeof r === 'string' && r.startsWith(op) && r.endsWith(';')) ? r.slice(op.length, -1) : null;
+const int = s => (s != null && /^[0-9]+$/.test(s) ? parseInt(s, 10) : null);
+
+export const parse = {
+  id: r => body(r, 'ID'),
+  freq: r => {
+    const b = body(r, r?.slice(0, 2));
+    return (r?.[0] === 'F' && (r[1] === 'A' || r[1] === 'B')) ? int(b) : null;
+  },
+  mode: r => { const b = body(r, 'MD'); return b && b.length === 2 ? (CODE_TO_MODE[b[1]] ?? null) : null; },
+  vfoLevel: (r, op) => { const b = body(r, op); return b ? int(b.slice(1)) : null; }, // AG0nnn, RG0nnn...
+  plain: (r, op) => int(body(r, op)),               // MGnnn, PLnnn, KSnnn...
+  flag: (r, op) => { const b = body(r, op); return b ? b.slice(-1) === '1' : null; },
+  agc: r => { const b = body(r, 'GT'); return b ? int(b.slice(1)) : null; },
+  preamp: r => { const b = body(r, 'PA'); return b ? int(b.slice(1)) : null; },
+  width: r => { const b = body(r, 'SH'); return b && b.length >= 4 ? int(b.slice(2, 4)) : null; },
+  ifShift: r => {
+    const b = body(r, 'IS');
+    if (!b || b.length < 7) return null;
+    const on = b[1] === '1'; const mag = int(b.slice(3, 7));
+    if (mag == null) return null;
+    return on ? (b[2] === '-' ? -mag : mag) : 0;
+  },
+  // BP/CO replies: P1 VFO, P2 sub-function, then value.
+  sub: (r, op) => { const b = body(r, op); return b && b.length >= 3 ? { fn: b[1], value: int(b.slice(2)) } : null; },
+  smeter: r => { const b = body(r, 'SM'); return b && b.length === 4 ? int(b.slice(1)) : null; },
+  meter: r => { const b = body(r, 'RM'); return b && b.length >= 4 ? { meter: int(b[0]), raw: int(b.slice(1, 4)) } : null; },
+  ptt: r => { const b = body(r, 'TX'); return b ? b !== '0' : null; },
+  power: r => {
+    const b = body(r, 'PC');
+    if (!b || b.length < 2) return null;
+    const head = b[0] === '2' ? 'optima' : 'field';
+    const watts = parseFloat(b.slice(1));
+    return Number.isFinite(watts) ? { head, watts } : null;
+  },
+  txVfo: r => { const b = body(r, 'FT'); return b ? int(b) : null; },
+  tuning: r => { const b = body(r, 'AC'); return b && b.length === 3 ? b[2] !== '0' : null; },
+  keyPitch: r => { const n = int(body(r, 'KP')); return n == null ? null : 300 + n * 10; },
+};
+
+// ---------- meter calibration ----------
+function interp(table, raw) {
+  if (raw <= table[0][0]) return table[0][1];
+  for (let i = 1; i < table.length; i++) {
+    const [x1, y1] = table[i];
+    const [x0, y0] = table[i - 1];
+    if (raw <= x1) return y0 + (y1 - y0) * (raw - x0) / (x1 - x0);
+  }
+  return table[table.length - 1][1];
+}
+const S_CAL = [[0, -54], [12, -48], [27, -42], [40, -36], [55, -30], [65, -24], [80, -18], [95, -12],
+  [112, -6], [130, 0], [150, 10], [172, 20], [190, 30], [220, 40], [240, 50], [255, 60]];
+const PO_CAL = [[0, 0], [10, 0.8], [50, 8], [100, 26], [150, 54], [200, 92], [250, 140]];
+const SWR_CAL = [[0, 1.0], [12, 1.0], [39, 1.35], [65, 1.5], [89, 2.0], [242, 5.0], [255, 5.5]];
+
+export const calibrate = {
+  sDb: raw => interp(S_CAL, raw),                 // dB relative to S9
+  sLabel: raw => {
+    const db = interp(S_CAL, raw);
+    if (db <= 0) return `S${Math.max(0, Math.round((db + 54) / 6))}`;
+    return `S9+${Math.round(db / 10) * 10}`;
+  },
+  // PO table is scaled for 100 W full scale; Field head readings scale down.
+  poWatts: (raw, maxWatts = 100) => interp(PO_CAL, raw) * (maxWatts / 100),
+  swr: raw => interp(SWR_CAL, raw),
+  alcFraction: raw => Math.min(1, raw / 255),
+};
+
+export function widthTable(mode) {
+  if (/^(LSB|USB)$/.test(mode)) return SSB_WIDTHS;
+  if (/^(CW|DATA-[LU]|RTTY|PSK)/.test(mode)) return NARROW_WIDTHS;
+  return null; // AM/FM: fixed
+}
+
+export function preampBandType(hz) {
+  if (hz >= 420000000) return 2;
+  if (hz >= 144000000) return 1;
+  return 0;
+}

@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FTX Deck</title>
+  <meta name="description" content="Browser control console for the Yaesu FTX-1: CAT control, USB audio, audio waterfall and meters.">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="assets/icon.svg" alt="" width="22" height="22">
+      <span class="brand-name">FTX Deck</span>
+      <span class="brand-sub">for Yaesu FTX-1</span>
+    </div>
+    <div class="top-actions">
+      <button id="btnConnect" class="btn btn-primary">Connect radio</button>
+      <button id="btnDemo" class="btn">Demo</button>
+      <button id="btnAudio" class="btn">Start audio</button>
+      <span class="pill" id="pillCat"><i></i><b>CAT</b><span>offline</span></span>
+      <span class="pill" id="pillAudio"><i></i><b>Audio</b><span>off</span></span>
+      <span class="pill pill-plain" id="pillHead" hidden></span>
+      <button id="btnDiag" class="btn btn-ghost" title="CAT traffic and diagnostics">Diagnostics</button>
+      <button id="btnSettings" class="btn btn-ghost" title="Settings">Settings</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main class="console">
+    <!-- VFOs -->
+    <section class="panel vfos" aria-label="VFOs">
+      <div class="vfo" id="vfoA" data-vfo="0">
+        <div class="vfo-head">
+          <span class="vfo-name">VFO A <em>MAIN</em></span>
+          <span class="vfo-tags">
+            <span class="tag tag-rx">RX</span>
+            <span class="tag tag-tx">TX</span>
+          </span>
+        </div>
+        <div class="freq" tabindex="0" aria-label="VFO A frequency"></div>
+        <div class="vfo-foot">
+          <span class="mode-tag"></span>
+          <span class="vfo-info"></span>
+        </div>
+      </div>
+      <div class="vfo-ops">
+        <button class="btn btn-small" id="btnAB" title="Copy A to B">A→B</button>
+        <button class="btn btn-small" id="btnBA" title="Copy B to A">B→A</button>
+        <button class="btn btn-small" id="btnSwap" title="Swap A and B">A⇄B</button>
+        <button class="btn btn-small btn-toggle" id="btnSplit" title="Receive on A, transmit on B">SPLIT</button>
+        <label class="step" title="Tuning step for the mouse wheel and arrow keys">
+          <select id="selStep" aria-label="Tuning step">
+            <option value="1">1 Hz</option>
+            <option value="10">10 Hz</option>
+            <option value="50">50 Hz</option>
+            <option value="100" selected>100 Hz</option>
+            <option value="500">500 Hz</option>
+            <option value="1000">1 kHz</option>
+            <option value="2500">2.5 kHz</option>
+            <option value="5000">5 kHz</option>
+            <option value="10000">10 kHz</option>
+            <option value="12500">12.5 kHz</option>
+            <option value="25000">25 kHz</option>
+          </select>
+        </label>
+      </div>
+      <div class="vfo" id="vfoB" data-vfo="1">
+        <div class="vfo-head">
+          <span class="vfo-name">VFO B <em>SUB</em></span>
+          <span class="vfo-tags">
+            <span class="tag tag-rx">RX</span>
+            <span class="tag tag-tx">TX</span>
+          </span>
+        </div>
+        <div class="freq" tabindex="0" aria-label="VFO B frequency"></div>
+        <div class="vfo-foot">
+          <span class="mode-tag"></span>
+          <span class="vfo-info"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Meters -->
+    <section class="panel meters" aria-label="Meters">
+      <canvas class="meter" id="mS" data-kind="s"></canvas>
+      <canvas class="meter" id="mPO" data-kind="po"></canvas>
+      <canvas class="meter" id="mSWR" data-kind="swr"></canvas>
+      <canvas class="meter" id="mALC" data-kind="alc"></canvas>
+    </section>
+
+    <!-- Spectrum / waterfall -->
+    <section class="panel scope" aria-label="Audio spectrum and waterfall">
+      <div class="panel-head">
+        <h2>Spectrum <span class="muted">· receive audio</span></h2>
+        <div class="scope-tools">
+          <label>Span
+            <select id="selSpan">
+              <option value="3000">3 kHz</option>
+              <option value="4000" selected>4 kHz</option>
+              <option value="6000">6 kHz</option>
+              <option value="12000">12 kHz</option>
+            </select>
+          </label>
+          <label>Floor <input type="range" id="rngFloor" min="-140" max="-60" value="-112"></label>
+          <label>Range <input type="range" id="rngRange" min="30" max="100" value="62"></label>
+          <label>Speed
+            <select id="selSpeed">
+              <option value="1">Slow</option>
+              <option value="2" selected>Normal</option>
+              <option value="4">Fast</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="scope-body">
+        <canvas id="spectrum"></canvas>
+        <canvas id="waterfall"></canvas>
+        <div class="scope-hint" id="scopeHint">Start audio to see the band. Click a signal to tune to it.</div>
+      </div>
+      <div class="scope-foot">
+        <canvas id="afScope" title="Receive audio oscilloscope"></canvas>
+        <div class="scope-note">The FTX-1 doesn't send its RF scope over USB, so this view is built from the receive audio. Width equals the radio's audio passband.</div>
+      </div>
+    </section>
+
+    <!-- RX DSP -->
+    <section class="panel dsp" aria-label="Receive DSP">
+      <div class="panel-head">
+        <h2>RX DSP <span class="muted" id="dspTarget">· MAIN</span></h2>
+        <span class="readout" id="bwReadout"></span>
+      </div>
+      <canvas id="passband" title="Drag sideways for IF shift · scroll for width"></canvas>
+      <div class="rows">
+        <div class="row"><label for="rWidth">Width</label><input type="range" id="rWidth" min="1" max="23" step="1"><output id="oWidth"></output></div>
+        <div class="row"><label for="rShift">Shift</label><input type="range" id="rShift" min="-1200" max="1200" step="20"><output id="oShift"></output><button class="btn btn-mini" id="btnShift0">0</button></div>
+        <div class="row"><button class="btn btn-toggle btn-small" id="tNotch">NOTCH</button><input type="range" id="rNotch" min="10" max="3200" step="10"><output id="oNotch"></output></div>
+        <div class="row"><button class="btn btn-toggle btn-small" id="tContour">CONTOUR</button><input type="range" id="rContour" min="10" max="3200" step="10"><output id="oContour"></output></div>
+        <div class="row"><label for="rNr">DNR</label><input type="range" id="rNr" min="0" max="10" step="1"><output id="oNr"></output></div>
+        <div class="row"><label for="rNb">NB</label><input type="range" id="rNb" min="0" max="10" step="1"><output id="oNb"></output></div>
+        <div class="row toggles">
+          <button class="btn btn-toggle btn-small" id="tDnf">DNF</button>
+          <button class="btn btn-toggle btn-small" id="tNarrow">NAR</button>
+          <button class="btn btn-toggle btn-small" id="tAtt">ATT</button>
+          <div class="seg" id="segPre" role="group" aria-label="Preamp"></div>
+        </div>
+        <div class="row"><label>AGC</label><div class="seg" id="segAgc" role="group" aria-label="AGC"></div></div>
+      </div>
+      <div class="rxlevels">
+        <h3>Receive levels</h3>
+        <div class="row"><label for="rAf">AF</label><input type="range" id="rAf" min="0" max="255"><output id="oAf"></output></div>
+        <div class="row"><label for="rRf">RF</label><input type="range" id="rRf" min="0" max="255"><output id="oRf"></output></div>
+        <div class="row"><label for="rSql">SQL</label><input type="range" id="rSql" min="0" max="100"><output id="oSql"></output></div>
+        <div class="row"><label for="rVol">PC vol</label><input type="range" id="rVol" min="0" max="100"><output id="oVol"></output><button class="btn btn-mini btn-toggle" id="tMute" title="Mute PC speakers">M</button></div>
+      </div>
+    </section>
+
+    <!-- Bands / modes -->
+    <section class="panel bandmode" aria-label="Band and mode">
+      <div class="group">
+        <h3>Band</h3>
+        <div class="grid-buttons" id="bands"></div>
+      </div>
+      <div class="group">
+        <h3>Mode</h3>
+        <div class="grid-buttons" id="modes"></div>
+      </div>
+    </section>
+
+    <!-- TX -->
+    <section class="panel tx" aria-label="Transmit">
+      <div class="panel-head">
+        <h2>Transmit</h2>
+        <span class="readout" id="txTimer"></span>
+      </div>
+      <button id="btnPtt" class="ptt" aria-pressed="false">
+        <span class="ptt-main">PTT</span>
+        <span class="ptt-sub" id="pttSub">hold to talk</span>
+      </button>
+      <div class="tx-buttons">
+        <button class="btn btn-small" id="btnTune">TUNE</button>
+        <button class="btn btn-small btn-toggle" id="tProc">PROC</button>
+        <button class="btn btn-small btn-toggle" id="tVox">VOX</button>
+        <button class="btn btn-small btn-toggle" id="tPcMic" title="Send the PC microphone to the radio while transmitting">PC MIC</button>
+      </div>
+      <div class="rows">
+        <div class="row"><label for="rPower">Power</label><input type="range" id="rPower" min="5" max="100" step="1"><output id="oPower"></output></div>
+        <div class="row"><label for="rMic">Mic</label><input type="range" id="rMic" min="0" max="100"><output id="oMic"></output></div>
+        <div class="row"><label for="rProc">Proc</label><input type="range" id="rProc" min="0" max="100"><output id="oProc"></output></div>
+        <div class="row"><label for="rTxLvl">PC mic</label><input type="range" id="rTxLvl" min="0" max="100"><output id="oTxLvl"></output></div>
+        <div class="row"><label>Mic in</label><div class="levelbar"><i id="micBar"></i></div></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Settings -->
+  <dialog id="dlgSettings" class="dialog">
+    <form method="dialog">
+      <h2>Settings</h2>
+      <fieldset>
+        <legend>Radio link</legend>
+        <label>Baud rate
+          <select id="setBaud">
+            <option>4800</option><option>9600</option><option>19200</option>
+            <option selected>38400</option><option>57600</option><option>115200</option>
+          </select>
+        </label>
+        <p class="help">Match the radio's CAT RATE menu. Pick the <b>Enhanced COM</b> port when the browser asks.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Audio devices</legend>
+        <label>Radio audio in (receive) <select id="setRadioIn"></select></label>
+        <label>Radio audio out (transmit) <select id="setRadioOut"></select></label>
+        <label>PC speakers <select id="setSpeakers"></select></label>
+        <label>PC microphone <select id="setMic"></select></label>
+        <button type="button" class="btn btn-small" id="btnListDevices">Refresh device list</button>
+        <p class="help">The radio shows up as <b>USB Audio CODEC</b>. For PC-mic transmit, set the radio's SSB mod source to REAR/USB.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Safety</legend>
+        <label>Transmit timeout <select id="setTot">
+          <option value="60">1 min</option><option value="120">2 min</option>
+          <option value="180" selected>3 min</option><option value="300">5 min</option><option value="600">10 min</option>
+        </select></label>
+        <label class="check"><input type="checkbox" id="setSpacePtt"> Hold space bar to transmit</label>
+        <label class="check"><input type="checkbox" id="setLatchPtt"> PTT button latches (click on, click off)</label>
+      </fieldset>
+      <div class="dialog-actions"><button class="btn btn-primary" value="close">Done</button></div>
+    </form>
+  </dialog>
+
+  <!-- Diagnostics -->
+  <dialog id="dlgDiag" class="dialog dialog-wide">
+    <form method="dialog">
+      <h2>Diagnostics</h2>
+      <p class="help" id="diagStats"></p>
+      <pre id="diagLog" class="log"></pre>
+      <div class="dialog-actions">
+        <button type="button" class="btn" id="btnCopyLog">Copy</button>
+        <button class="btn btn-primary" value="close">Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Frequency entry -->
+  <dialog id="dlgFreq" class="dialog dialog-small">
+    <form method="dialog" id="freqForm">
+      <h2 id="freqTitle">Enter frequency</h2>
+      <input id="freqInput" inputmode="decimal" autocomplete="off" placeholder="14.074 or 14074">
+      <p class="help">MHz with a decimal point (14.074), or kHz without (14074).</p>
+      <div class="dialog-actions">
+        <button class="btn" value="cancel">Cancel</button>
+        <button class="btn btn-primary" value="ok">Tune</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

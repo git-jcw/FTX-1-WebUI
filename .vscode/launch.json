@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "FTX Deck in Edge",
+      "type": "msedge",
+      "request": "launch",
+      "url": "http://localhost:8765/",
+      "preLaunchTask": "FTX Deck: serve",
+      "webRoot": "${workspaceFolder}"
+    },
+    {
+      "name": "FTX Deck in Chrome",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:8765/",
+      "preLaunchTask": "FTX Deck: serve",
+      "webRoot": "${workspaceFolder}"
+    }
+  ]
+}
