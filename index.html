@@ -55,6 +55,7 @@
         <button class="btn btn-small" id="btnSwap" title="Swap A and B">A⇄B</button>
         <button class="btn btn-small btn-toggle" id="btnSplit" title="Receive on A, transmit on B">SPLIT</button>
         <label class="step" title="Tuning step for the mouse wheel and arrow keys">
+          <span>Step</span>
           <select id="selStep" aria-label="Tuning step">
             <option value="1">1 Hz</option>
             <option value="10">10 Hz</option>
@@ -67,6 +68,14 @@
             <option value="10000">10 kHz</option>
             <option value="12500">12.5 kHz</option>
             <option value="25000">25 kHz</option>
+          </select>
+        </label>
+        <label class="step" title="Show one VFO or both. Auto follows the radio's single / dual receive setting">
+          <span>View</span>
+          <select id="selVfoView" aria-label="VFOs shown">
+            <option value="auto" selected>Auto</option>
+            <option value="1">1 VFO</option>
+            <option value="2">2 VFOs</option>
           </select>
         </label>
       </div>
@@ -83,6 +92,10 @@
           <span class="mode-tag"></span>
           <span class="vfo-info"></span>
         </div>
+      </div>
+      <div class="dial" id="dial" tabindex="0" role="slider" aria-label="Tuning dial"
+           title="Drag round to tune the selected VFO by the step. Flick to spin; scroll or arrow keys for single steps.">
+        <div class="dial-knob"><div class="dial-rotor"><i></i></div></div>
       </div>
     </section>
 
@@ -101,10 +114,10 @@
         <div class="scope-tools">
           <label>Span
             <select id="selSpan">
-              <option value="3000">3 kHz</option>
-              <option value="4000" selected>4 kHz</option>
               <option value="6000">6 kHz</option>
+              <option value="8000" selected>8 kHz</option>
               <option value="12000">12 kHz</option>
+              <option value="24000">24 kHz</option>
             </select>
           </label>
           <label>Floor <input type="range" id="rngFloor" min="-140" max="-60" value="-112"></label>
@@ -125,7 +138,7 @@
       </div>
       <div class="scope-foot">
         <canvas id="afScope" title="Receive audio oscilloscope"></canvas>
-        <div class="scope-note">The FTX-1 doesn't send its RF scope over USB, so this view is built from the receive audio. Width equals the radio's audio passband.</div>
+        <div class="scope-note">The FTX-1 doesn't send its RF scope over USB, so this view is built from the receive audio and centred on the dial frequency. Only the radio's audio passband has signal in it.</div>
       </div>
     </section>
 
@@ -187,6 +200,18 @@
         <button class="btn btn-small btn-toggle" id="tProc">PROC</button>
         <button class="btn btn-small btn-toggle" id="tVox">VOX</button>
         <button class="btn btn-small btn-toggle" id="tPcMic" title="Send the PC microphone to the radio while transmitting">PC MIC</button>
+      </div>
+      <div class="tx-auto" title="Runs a tune cycle (a short transmission) once you've moved 10 kHz or more, or changed band, and then stayed on the new frequency. HF and 6 m only.">
+        <button class="btn btn-small btn-toggle" id="tAutoTune">AUTO TUNE</button>
+        <label>after
+          <select id="selAutoTune" aria-label="Auto tune delay">
+            <option value="2">2 s</option>
+            <option value="3" selected>3 s</option>
+            <option value="5">5 s</option>
+            <option value="10">10 s</option>
+          </select>
+          on frequency
+        </label>
       </div>
       <div class="rows">
         <div class="row"><label for="rPower">Power</label><input type="range" id="rPower" min="5" max="100" step="1"><output id="oPower"></output></div>

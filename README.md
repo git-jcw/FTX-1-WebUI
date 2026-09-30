@@ -14,14 +14,17 @@ No install and no drivers beyond the radio's own USB driver. Nothing leaves your
 ## What it does
 
 - **VFO A (MAIN) and VFO B (SUB):** scroll over any digit to tune by that digit, or
-  double-click to type a frequency. Also A→B, B→A, swap, and split (RX on A, TX on B).
+  double-click to type a frequency, or spin the on-screen dial. Also A→B, B→A, swap, and split (RX on A, TX on B).
+  When the radio is in single receive, only the selected VFO is shown, as on the
+  radio's own screen.
 - **Band buttons with band stacking:** each band remembers its last frequency and mode.
   A band's first visit goes to the lowest SSB voice frequency for your US license
   class (Technician, General or Amateur Extra, chosen in Settings). Click the band
   you're already on to go back there.
 - **All the modes:** LSB, USB, CW, AM, FM, DATA, RTTY, PSK and so on.
 - **Meters:** S, PO, SWR and ALC, driven by live readings from the radio.
-- **Spectrum and waterfall of the receive audio.** Click a signal to tune it in:
+- **Spectrum and waterfall of the receive audio**, centred on the dial frequency.
+  Click a signal to tune it in:
   - CW: the signal lands on your pitch.
   - DATA: it lands at 1500 Hz.
   - SSB: click a signal's low edge.
@@ -33,6 +36,8 @@ No install and no drivers beyond the radio's own USB driver. Nothing leaves your
 - **Transmit:**
   - hold-to-talk PTT;
   - power, mic gain, processor, VOX, TUNE;
+  - optional **auto tune**: runs a tune cycle once you've moved 10 kHz or more (or
+    changed band) and stayed on the new frequency for a few seconds;
   - optional **PC microphone** routed to the radio over USB.
 - **Safety:**
   - a transmit timeout (3 min by default);

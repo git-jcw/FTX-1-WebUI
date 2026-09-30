@@ -23,6 +23,24 @@ export const PREAMP_NAMES_HF = ['IPO', 'AMP1', 'AMP2'];
 
 export const METER = { MAIN_S: 1, SUB_S: 2, COMP: 3, ALC: 4, PO: 5, SWR: 6, ID: 7, VDD: 8 };
 
+// Tuner type of an antenna port, as stored in the radio menu (TUNER TYPE SEL).
+export const TUNER = { INT: 0, INT_FAST: 1, EXT: 2, ATAS: 3 };
+export const TUNER_NAMES = ['INT', 'INT (FAST)', 'EXT', 'ATAS'];
+export const MENU = { TUNER_ANT1: '030701', TUNER_ANT2: '030702', HF_ANT: '030704' };
+
+// AC commands that start / stop a tune cycle for a tuner type, in the order to
+// try them; the radio answers "?;" to a form it doesn't take, which does nothing.
+// AC P1 P2 P3: P1 0 internal / 1 external port, P2 0 tuner / 2 ATAS, P3 0 stop / 3 start.
+// Yaesu documents AC003 for the internal tuner; Hamlib's hardware testing found
+// AC103 starts the cycle whichever tuner is selected, and that an ATAS only
+// takes the AC12x forms. `type` null = the menu couldn't be read.
+export function tuneCommands(type) {
+  if (type === TUNER.ATAS) return { start: ['AC123;'], stop: ['AC120;'] };
+  if (type === TUNER.INT || type === TUNER.INT_FAST) return { start: ['AC003;', 'AC103;'], stop: ['AC000;', 'AC100;'] };
+  if (type === TUNER.EXT) return { start: ['AC103;', 'AC003;'], stop: ['AC000;', 'AC100;'] };
+  return { start: ['AC103;', 'AC003;', 'AC123;'], stop: ['AC000;', 'AC100;', 'AC120;'] };
+}
+
 // Bands for the band buttons. `start`/`end` are the band edges used to
 // decide which band a frequency is in; `def`/`mode` are the fallback
 // first-visit frequency and mode. `phone` is the lower edge of the US phone
@@ -85,6 +103,7 @@ const KEYED_BY_DIGIT = new Set(['AG', 'RG', 'SQ', 'MD', 'SM', 'SH', 'IS', 'NL', 
 const KEYED_BY_TWO = new Set(['BP', 'CO']);
 export function replyKey(text) {
   const op = text.slice(0, 2);
+  if (op === 'EX') return text.slice(0, 8); // menu item: EX + group, section, item
   if (KEYED_BY_TWO.has(op)) return text.slice(0, 4);
   if (KEYED_BY_DIGIT.has(op)) return text.slice(0, 3);
   return op;
@@ -140,8 +159,7 @@ export const cmd = {
   vox: on => `VX${on ? 1 : 0};`,
   voxGain: n => `VG${pad(clamp(n, 0, 100), 3)};`,
   monitorLevel: n => `ML0${pad(clamp(n, 0, 100), 3)};`,
-  tuneStart: () => 'AC003;',
-  tuneStop: () => 'AC000;',
+  readMenu: item => `EX${item};`,
   keySpeed: wpm => `KS${pad(clamp(wpm, 4, 60), 3)};`,
   keyPitch: hz => `KP${pad(clamp(Math.round((hz - 300) / 10), 0, 75), 2)};`,
   readMeter: n => `RM${n};`,
@@ -187,6 +205,12 @@ export const parse = {
   },
   txVfo: r => { const b = body(r, 'FT'); return b ? int(b) : null; },
   tuning: r => { const b = body(r, 'AC'); return b && b.length === 3 ? b[2] !== '0' : null; },
+  // RI reply: eight status digits P1..P8 (the receiver asked about isn't echoed).
+  radioInfo: r => {
+    const b = body(r, 'RI');
+    return b && /^\d{8}/.test(b) ? { tuning: b[5] === '1', sqlOpen: b[7] === '1' } : null;
+  },
+  menu: r => { const b = body(r, 'EX'); return b && b.length > 6 ? int(b.slice(6)) : null; },
   keyPitch: r => { const n = int(body(r, 'KP')); return n == null ? null : 300 + n * 10; },
 };
 
@@ -223,6 +247,19 @@ export function widthTable(mode) {
   if (/^(CW|DATA-[LU]|RTTY|PSK)/.test(mode)) return NARROW_WIDTHS;
   return null; // AM/FM: fixed
 }
+
+// RF power range for a configuration, from Yaesu's specifications:
+//   Optima/SPA-1: 5-100 W on HF/50 MHz, 5-50 W from 70 MHz up (AM carrier 25 / 13 W)
+//   Field head:   0.5-10 W on 13.8 V, 0.5-6 W on its battery (AM carrier 2.5 / 1.5 W)
+export function powerLimits({ head, hz, mode, battery = false }) {
+  const am = /^AM/.test(mode || '');
+  if (head === 'optima') {
+    const vu = hz >= 60000000;
+    return { min: 5, max: am ? (vu ? 13 : 25) : (vu ? 50 : 100) };
+  }
+  return { min: 0.5, max: am ? (battery ? 1.5 : 2.5) : (battery ? 6 : 10) };
+}
+export const FIELD_BATTERY_MAX_W = 6;
 
 export function preampBandType(hz) {
   if (hz >= 420000000) return 2;

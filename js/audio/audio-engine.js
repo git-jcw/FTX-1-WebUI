@@ -4,10 +4,12 @@
 //   RX:  radio USB codec (input) ─┬─> analyser (waterfall/scope)
 //                                 └─> volume ─> PC speakers (AudioContext sink)
 //   TX:  PC microphone ─> mic level ─> gate (open only while PTT) ─> radio USB codec (output)
+//        The microphone track itself is muted except while PTT is down.
 //
 // Chrome/Edge are required for output-device selection (setSinkId).
 
 const RADIO_LABEL = /usb audio codec|ftx|yaesu|burr-brown|pcm29/i;
+const MIC_OFF_DELAY_MS = 80; // lets the TX gate finish closing before the mic is muted
 
 export class AudioEngine extends EventTarget {
   constructor() {
@@ -23,12 +25,13 @@ export class AudioEngine extends EventTarget {
     this.txGate = null;
     this.txDest = null;
     this.txElement = null;
+    this._micOffTimer = null;
     this.demoNodes = [];
     this.state = {
       running: false, demo: false, error: null,
       inputs: [], outputs: [],
       radioIn: '', radioOut: '', speakers: '', mic: '',
-      volume: 0.7, txLevel: 0.8, txActive: false, muted: false,
+      volume: 0.7, txLevel: 0.8, txActive: false, muted: false, squelched: false,
     };
     this._load();
   }
@@ -62,7 +65,7 @@ export class AudioEngine extends EventTarget {
     this.analyser.minDecibels = -130;
     this.analyser.maxDecibels = -20;
     this.rxVolume = this.ctx.createGain();
-    this.rxVolume.gain.value = this.state.volume;
+    this.rxVolume.gain.value = this.state.muted || this.state.squelched ? 0 : this.state.volume;
     this.rxVolume.connect(this.ctx.destination);
     return this.ctx;
   }
@@ -135,13 +138,18 @@ export class AudioEngine extends EventTarget {
     this._patch({ running: false, demo: false });
   }
 
-  setVolume(v) {
-    this._patch({ volume: v });
-    if (this.rxVolume) this.rxVolume.gain.setTargetAtTime(this.state.muted ? 0 : v, this.ctx.currentTime, 0.02);
+  setVolume(v) { this._patch({ volume: v }); this._applyVolume(); }
+  setMuted(m) { this._patch({ muted: m }); this._applyVolume(); }
+  // The radio's USB audio carries the receiver even with its squelch closed,
+  // so the speakers are silenced here while it is. The waterfall still sees it.
+  setSquelched(closed) {
+    if (closed === this.state.squelched) return;
+    this.state.squelched = closed;
+    this._applyVolume();
   }
-  setMuted(m) {
-    this._patch({ muted: m });
-    if (this.rxVolume) this.rxVolume.gain.setTargetAtTime(m ? 0 : this.state.volume, this.ctx.currentTime, 0.02);
+  _applyVolume() {
+    const s = this.state;
+    if (this.rxVolume) this.rxVolume.gain.setTargetAtTime(s.muted || s.squelched ? 0 : s.volume, this.ctx.currentTime, 0.02);
   }
 
   async setDevice(key, id) {
@@ -168,6 +176,7 @@ export class AudioEngine extends EventTarget {
       this._patch({ error: `Couldn't open the PC microphone: ${e.message}` });
       throw e;
     }
+    this._setMicLive(false);
     this.micSource = this.ctx.createMediaStreamSource(this.micStream);
     this.micAnalyser = this.ctx.createAnalyser();
     this.micAnalyser.fftSize = 1024;
@@ -197,7 +206,16 @@ export class AudioEngine extends EventTarget {
 
   setTxActive(on) {
     if (this.txGate) this.txGate.gain.setTargetAtTime(on ? this.state.txLevel : 0, this.ctx.currentTime, 0.01);
+    // Unkeyed, the mic is muted at the source once the gate has closed.
+    clearTimeout(this._micOffTimer);
+    if (on) this._setMicLive(true); else this._micOffTimer = setTimeout(() => this._setMicLive(false), MIC_OFF_DELAY_MS);
     if (this.state.txActive !== on) this._patch({ txActive: on });
+  }
+
+  // A disabled track delivers silence: nothing from the microphone reaches
+  // the page. The device itself stays open so keying up is instant.
+  _setMicLive(live) {
+    for (const t of this.micStream?.getAudioTracks() ?? []) t.enabled = live;
   }
   setTxLevel(v) {
     this._patch({ txLevel: v });

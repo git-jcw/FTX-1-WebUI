@@ -7,7 +7,8 @@ import { BANDS, bandForFreq, bandDefault, widthTable, AGC_NAMES, PREAMP_NAMES_HF
 import { AudioEngine } from './audio/audio-engine.js';
 import { ArcMeter } from './ui/meters.js';
 import { SpectrumWaterfall, Oscilloscope, PassbandView } from './ui/scope.js';
-import { renderFreq, parseFreqInput } from './ui/vfo.js';
+import { renderFreq, parseFreqInput, formatFreqShort } from './ui/vfo.js';
+import { TuningDial } from './ui/dial.js';
 
 const $ = id => document.getElementById(id);
 const radio = new RadioService();
@@ -16,11 +17,13 @@ window.ftx = { radio, audio }; // handy from the browser console
 
 // ---------------- settings (per browser) ----------------
 const SETTINGS_KEY = 'ftxdeck.settings.v1';
-const settings = Object.assign({ baud: 38400, tot: 180, license: 'general', spacePtt: false, latchPtt: false, step: 100, span: 4000, floor: -112, range: 62, speed: 2 },
+const settings = Object.assign({ baud: 38400, tot: 180, license: 'general', spacePtt: false, latchPtt: false, autoTune: false, autoTuneDelay: 3, step: 100, vfoView: 'auto', span: 8000, floor: -112, range: 62, speed: 2 },
   (() => { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch { return {}; } })());
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* ignore */ } };
 radio.state.txTimeoutS = settings.tot;
 radio.state.license = settings.license;
+radio.state.autoTune = settings.autoTune;
+radio.state.autoTuneDelayS = settings.autoTuneDelay;
 
 // ---------------- banner ----------------
 function banner(text, { error = false } = {}) {
@@ -37,7 +40,7 @@ function banner(text, { error = false } = {}) {
 
 // ---------------- connect / demo ----------------
 $('btnConnect').onclick = async () => {
-  if (radio.state.connected && !radio.state.demo) { await radio.disconnect(); return; }
+  if (radio.state.connected && !radio.state.demo) { await radio.disconnect(); await stopAllAudio(); return; }
   if (!WebSerialTransport.supported()) {
     banner('This browser can\'t reach USB serial ports. Use Chrome or Edge on Windows, macOS or Linux, opened from http://localhost.', { error: true });
     return;
@@ -53,6 +56,13 @@ $('btnConnect').onclick = async () => {
     banner(`Couldn't connect: ${e.message}`, { error: true });
   }
 };
+
+// Connecting starts the audio, so disconnecting stops it: receive audio and the PC mic.
+async function stopAllAudio() {
+  if (pcMic) { audio.stopTxPath(); pcMic = false; }
+  if (audio.state.running) { await audio.stopRx(); scope.clear(); }
+  update();
+}
 
 // Demo starts with the speakers muted; put the mute back how it was on the way out.
 let mutedBeforeDemo = false;
@@ -111,6 +121,9 @@ for (const el of [$('vfoA'), $('vfoB')]) {
 }
 $('selStep').value = String(settings.step);
 $('selStep').onchange = e => { settings.step = +e.target.value; saveSettings(); };
+$('selVfoView').value = settings.vfoView;
+$('selVfoView').onchange = e => { settings.vfoView = e.target.value; saveSettings(); update(); };
+new TuningDial($('dial'), { onStep: n => radio.tuneBy(radio.state.active, n * settings.step) });
 $('btnAB').onclick = () => radio.aToB();
 $('btnBA').onclick = () => radio.bToA();
 $('btnSwap').onclick = () => radio.swap();
@@ -297,9 +310,14 @@ window.addEventListener('keyup', e => {
 radio.addEventListener('change', () => {
   // If the radio stops transmitting on its own (timeout, disconnect), close the mic gate too.
   if (!radio.state.tx && audio.state.txActive) audio.setTxActive(false);
+  // PC speakers follow the radio's squelch (unknown counts as open).
+  audio.setSquelched(radio.state.connected && radio.state.sqlOpen === false);
 });
 
 $('btnTune').onclick = () => radio.tune();
+toggle('tAutoTune', () => S().autoTune, on => { settings.autoTune = on; saveSettings(); radio.setAutoTune(on); });
+$('selAutoTune').value = String(settings.autoTuneDelay);
+$('selAutoTune').onchange = e => { settings.autoTuneDelay = radio.state.autoTuneDelayS = +e.target.value; saveSettings(); };
 
 // ---------------- settings dialog ----------------
 function fillSelect(sel, list, value) {
@@ -366,6 +384,7 @@ const passband = new PassbandView($('passband'), model, {
     radio.setWidth(Math.max(1, Math.min(t.length - 1, (S().width || defaultWidthCode()) + dir)));
   },
 });
+if (![...$('selSpan').options].some(o => +o.value === settings.span)) settings.span = 8000; // span from an older layout
 Object.assign(scope, { span: settings.span, floor: settings.floor, range: settings.range, speed: settings.speed });
 $('selSpan').value = String(settings.span);
 $('rngFloor').value = String(settings.floor);
@@ -391,7 +410,7 @@ function update() {
   au.className = `pill ${audio.state.running ? 'ok' : audio.state.error ? 'err' : ''}`;
   au.querySelector('span').textContent = audio.state.running ? (audio.state.demo ? 'demo' : 'on') : 'off';
   $('pillHead').hidden = !live;
-  $('pillHead').textContent = s.head === 'optima' ? 'Optima · 100 W' : 'Field head · 10 W';
+  $('pillHead').textContent = `${s.head === 'optima' ? 'Optima' : s.battery ? 'Field head, battery' : 'Field head'} · ${s.maxWatts} W max`;
   $('btnConnect').textContent = live && !s.demo ? 'Disconnect' : 'Connect radio';
   $('btnConnect').classList.toggle('btn-primary', !(live && !s.demo));
   $('btnDemo').textContent = s.demo ? 'Exit demo' : 'Demo';
@@ -399,8 +418,12 @@ function update() {
   $('btnAudio').textContent = audio.state.running ? 'Stop audio' : 'Start audio';
   $('scopeHint').hidden = audio.state.running;
 
-  // VFOs
+  // VFOs: like the radio's screen, single receive shows only the selected VFO
+  // (split still needs both, since B is the transmit frequency).
+  const both = s.split || (settings.vfoView === 'auto' ? s.dual : settings.vfoView === '2');
+  $('vfoA').parentElement.classList.toggle('single', !both);
   for (const [el, v] of [[$('vfoA'), 0], [$('vfoB'), 1]]) {
+    el.hidden = !both && v !== s.active;
     const f = v ? s.freqB : s.freqA, m = v ? s.modeB : s.modeA;
     renderFreq(el.querySelector('.freq'), f);
     el.classList.toggle('active', s.active === v);
@@ -408,12 +431,19 @@ function update() {
     const band = bandForFreq(f);
     el.querySelector('.vfo-info').textContent = band ? `${band.label}${/^\d+$/.test(band.label) ? ' m' : ''}` : 'GEN';
     const txOnThis = s.split ? v === 1 : v === s.active;
-    el.querySelector('.tag-rx').classList.toggle('on', v === s.active || (s.split && v === 0));
+    const rxTag = el.querySelector('.tag-rx');
+    rxTag.classList.toggle('on', v === s.active || (s.split && v === 0));
+    // MAIN's RX tag reads SQL while the radio reports its squelch closed (PC audio is muted then)
+    const squelched = v === 0 && s.sqlOpen === false;
+    rxTag.classList.toggle('sql-closed', squelched);
+    rxTag.textContent = squelched ? 'SQL' : 'RX';
     const tx = el.querySelector('.tag-tx');
     tx.classList.toggle('on', txOnThis);
     tx.classList.toggle('live', txOnThis && s.tx);
   }
   $('btnSplit').setAttribute('aria-pressed', String(s.split));
+  $('dial').setAttribute('aria-valuenow', String(radio.activeFreq));
+  $('dial').setAttribute('aria-valuetext', `VFO ${s.active ? 'B' : 'A'} ${formatFreqShort(radio.activeFreq)}`);
 
   // band/mode buttons
   const curBand = bandForFreq(radio.activeFreq)?.id;
@@ -467,7 +497,9 @@ function frame(now) {
   osc.draw();
   passband.draw();
   $('micBar').style.width = `${Math.min(100, audio.micLevel() * 140)}%`;
-  $('txTimer').textContent = s.tx && s.txStartedAt ? `TX ${Math.floor((Date.now() - s.txStartedAt) / 1000)} s / ${s.txTimeoutS} s` : '';
+  const autoWait = radio.autoTuneWait();
+  $('txTimer').textContent = s.tx && s.txStartedAt ? `TX ${Math.floor((Date.now() - s.txStartedAt) / 1000)} s / ${s.txTimeoutS} s`
+    : autoWait != null ? `auto tune in ${Math.ceil(autoWait / 1000)} s` : '';
   requestAnimationFrame(frame);
 }
 

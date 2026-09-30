@@ -3,20 +3,31 @@
 // exercised without hardware. Behaviour follows docs/FTX1-CAT-NOTES.md.
 
 export class MockRadioTransport {
-  constructor({ latencyMs = 4 } = {}) {
+  // `tuner` is the TUNER TYPE SEL menu value (0 INT, 1 INT FAST, 2 EXT, 3 ATAS);
+  // null makes the tuner menu unreadable. `tunerFitted: false` rejects every tune start.
+  // `tuneMs` is how long a tune cycle lasts; afterwards AC; goes on reporting the tuner as on.
+  // `head` is 'optima' or 'field'; `battery` puts a Field head on its battery (6 W limit).
+  constructor({ latencyMs = 4, tuner = 0, tunerFitted = true, tuneMs = 2500, head = 'optima', battery = false } = {}) {
+    this.head = head;
+    this.battery = battery;
+    this.tunerFitted = tunerFitted;
+    this.tuneMs = tuneMs;
+    this._tunerOn = false;
+    this.menu = tuner == null ? {} : { '030701': tuner, '030702': tuner, '030704': 0 };
     this.onData = () => {};
     this.onClose = () => {};
     this.label = 'Demo radio (simulated FTX-1 Optima)';
     this.latencyMs = latencyMs;
     this.log = [];
     this.s = {
-      FA: 14250000, FB: 7074000, MD: ['2', 'C'], VS: 0, FT: 0,
+      FA: 14250000, FB: 7074000, MD: ['2', 'C'], VS: 0, FT: 0, FR: 0,
       AG: [128, 100], RG: [255, 255], SQ: [0, 0], GT: [4, 4], PA: [1, 0, 0], RA: 0,
       SH: [17, 16], IS: [0, 0], NL: [0, 0], RL: [0, 0], BC: [0, 0],
       BP: [[0, 100], [0, 100]], CO: [[0, 1000, 0, 25], [0, 1000, 0, 25]], NA: [0, 0],
       TX: 0, PC: ['2', 50], MG: 50, PR: 0, PL: 50, AO: 50, VX: 0, VG: 50, ML: 50,
       KS: 20, KP: 30, AC: '000', AI: 0,
     };
+    if (head === 'field') this.s.PC = ['1', 5];
     this._tuneUntil = 0;
   }
 
@@ -49,6 +60,7 @@ export class MockRadioTransport {
       case 'MD': if (a.length === 2) { s.MD[v] = a[1]; return null; } return `MD${v}${s.MD[v]};`;
       case 'VS': if (a) { s.VS = +a; return null; } return `VS${s.VS};`;
       case 'FT': if (a) { s.FT = +a; return null; } return `FT${s.FT};`;
+      case 'FR': if (a) { s.FR = +a; return null; } return `FR${p2(s.FR)};`;
       case 'AB': s.FB = s.FA; s.MD[1] = s.MD[0]; return null;
       case 'BA': s.FA = s.FB; s.MD[0] = s.MD[1]; return null;
       case 'SV': [s.FA, s.FB] = [s.FB, s.FA]; s.MD.reverse(); return null;
@@ -76,27 +88,50 @@ export class MockRadioTransport {
         return `CO${v}${fn}${p4(s.CO[v][fn])};`;
       }
       case 'TX': if (a) { s.TX = +a; return null; } return `TX${s.TX};`;
-      case 'PC':
+      case 'PC': {
+        // Out-of-range power is refused, as on the radio: 50 W on VHF/UHF for
+        // the Optima, 6 W for a Field head on its battery.
+        const field = this.head === 'field';
+        const max = field ? (this.battery ? 6 : 10) : (s.VS ? s.FB : s.FA) >= 60000000 ? 50 : 100;
         if (a) {
-          if (a[0] !== '2') return '?;';
-          const w = +a.slice(1); if (w < 5 || w > 100) return '?;';
-          s.PC = ['2', w]; return null;
+          if (a[0] !== (field ? '1' : '2')) return '?;';
+          const w = +a.slice(1);
+          if (!(w >= (field ? 0.5 : 5) && w <= max)) return '?;';
+          s.PC[1] = w; return null;
         }
-        return `PC2${p3(s.PC[1])};`;
+        const w = Math.min(s.PC[1], max);
+        return field ? `PC1${Number.isInteger(w) ? p3(w) : w.toFixed(1)};` : `PC2${p3(w)};`;
+      }
       case 'MG': case 'PL': case 'AO': case 'VG': case 'KS':
         if (a) { s[op] = +a; return null; } return `${op}${p3(s[op])};`;
       case 'KP': if (a) { s.KP = +a; return null; } return `KP${p2(s.KP)};`;
       case 'PR': if (a.length === 2) { s.PR = +a[1]; return null; } return `PR0${s.PR};`;
       case 'ML': if (a.length === 4) { s.ML = +a.slice(1); return null; } return `ML0${p3(s.ML)};`;
       case 'VX': if (a) { s.VX = +a; return null; } return `VX${s.VX};`;
-      case 'AC':
+      case 'EX': {
+        const item = a.slice(0, 6);
+        if (!(item in this.menu)) return '?;';
+        if (a.length > 6) { this.menu[item] = +a.slice(6); return null; }
+        return `EX${item}${this.menu[item]};`;
+      }
+      case 'AC': {
+        // An ATAS only takes the AC12x forms; AC003 is the internal tuner's.
+        const type = this.menu['030701'] ?? 2;
+        const atas = type === 3, internal = type <= 1;
         if (a) {
-          if (a === '003') { this._tuneUntil = Date.now() + 2500; return null; }
-          if (a === '000') { this._tuneUntil = 0; return null; }
+          const start = atas ? a === '123' : a === '103' || (internal && a === '003');
+          const stop = atas ? a === '120' : a === '000' || a === '100';
+          if (start && this.tunerFitted) { this._tuneUntil = Date.now() + this.tuneMs; this._tunerOn = true; return null; }
+          if (stop) { this._tuneUntil = 0; this._tunerOn = false; return null; }
           return '?;';
         }
-        return `AC00${Date.now() < this._tuneUntil ? 3 : 0};`;
-      case 'SM': return `SM${v}${p3(this._sMeter(v))};`;
+        return `AC${internal ? 0 : 1}${atas ? 2 : 0}${Date.now() < this._tuneUntil ? 3 : this._tunerOn ? 1 : 0};`;
+      }
+      // Like the real radio: SM only answers for MAIN; RM1/RM2 work for both.
+      case 'SM': return v ? null : `SM0${p3(this._sMeter(0))};`;
+      // MAIN's squelch (P8) is open while its SQL setting is at or below 40.
+      // Like the real radio, RI1 gets no answer.
+      case 'RI': return v ? null : `RI0000000${s.SQ[0] <= 40 ? 1 : 0};`;
       case 'RM': return `RM${a[0]}${p3(this._meter(+a[0]))}000;`;
       // Commands the real FTX-1 rejects (see notes): answer like the radio does.
       case 'NB': case 'NR': case 'BS': case 'ST': return '?;';
@@ -126,7 +161,7 @@ export class MockRadioTransport {
         const env = tuning ? 0.35 : 0.55 + 0.45 * Math.abs(Math.sin(t * 4.1));
         return Math.round(Math.min(250, raw * env));
       }
-      case 6: return tx ? (tuning ? Math.round(80 - 60 * Math.min(1, (2500 - (this._tuneUntil - Date.now())) / 2500)) : 22) : 0;
+      case 6: return tx ? (tuning ? Math.round(80 - 60 * Math.min(1, (this.tuneMs - (this._tuneUntil - Date.now())) / this.tuneMs)) : 22) : 0;
       case 8: return 196;
       default: return 0;
     }

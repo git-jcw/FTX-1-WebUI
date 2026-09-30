@@ -18,10 +18,6 @@ export function audioOffset(mode, pitch) {
   if (/^RTTY/.test(mode)) return 2125; // mark tone default; verify on the radio
   return 0;
 }
-export function rfAtAudio(m, f) {
-  const sb = sidebandOf(m.mode);
-  return sb ? m.dial + sb * (f - audioOffset(m.mode, m.pitch)) : null;
-}
 // Where a click should put the dial so the clicked signal lands in the passband.
 export function clickTuneTarget(m, f) {
   const sb = sidebandOf(m.mode);
@@ -64,6 +60,7 @@ function buildPalette() {
   return pal;
 }
 const PALETTE = buildPalette();
+const BACKGROUND = '#05080b';
 
 function fitCanvas(cv) {
   const r = cv.getBoundingClientRect();
@@ -77,12 +74,14 @@ function fitCanvas(cv) {
 export class SpectrumWaterfall {
   constructor(specCanvas, wfCanvas, model, { onTune } = {}) {
     this.spec = specCanvas; this.wf = wfCanvas; this.model = model; this.onTune = onTune;
-    this.span = 4000; this.floor = -112; this.range = 62; this.speed = 2;
+    this.span = 8000; this.floor = -112; this.range = 62; this.speed = 2;
     this.hoverX = null;
     this.bins = null;
     this.avg = null;
     this.wfBuf = null;
     this._frame = 0;
+    this._dial = null;
+    this._shiftRem = 0;
     for (const cv of [this.spec, this.wf]) {
       cv.addEventListener('mousemove', e => { this.hoverX = e.offsetX / cv.clientWidth; });
       cv.addEventListener('mouseleave', () => { this.hoverX = null; });
@@ -90,16 +89,43 @@ export class SpectrumWaterfall {
     }
   }
 
-  // x (0..1 across the display) -> audio Hz. LSB-type modes are drawn
-  // reversed so RF frequency always increases left to right.
-  _audioAtX(x, m) { return (sidebandOf(m.mode) < 0 ? 1 - x : x) * this.span; }
-  _xAtAudio(f, m) { const x = f / this.span; return sidebandOf(m.mode) < 0 ? 1 - x : x; }
+  // The display is centred on the dial frequency and `span` Hz of RF wide,
+  // with RF increasing left to right. x is 0..1 across the display.
+  _offsetAtX(x) { return (x - 0.5) * this.span; }
+  // The audio frequency a signal at x is heard at. Negative means the far
+  // side of the carrier, which this sideband doesn't receive. AM/FM audio is
+  // both sidebands folded together, so it's drawn mirrored about the dial.
+  _audioAtX(x, m) {
+    const sb = sidebandOf(m.mode), off = this._offsetAtX(x);
+    return sb ? audioOffset(m.mode, m.pitch) + sb * off : Math.abs(off);
+  }
+  _xAtAudio(f, m) {
+    const sb = sidebandOf(m.mode);
+    return 0.5 + (sb ? sb * (f - audioOffset(m.mode, m.pitch)) : f) / this.span;
+  }
+  // Where a click at x puts the dial; AM/FM just tune to the clicked frequency.
+  _tuneTargetAtX(x, m) {
+    return clickTuneTarget(m, this._audioAtX(x, m)) ?? m.dial + this._offsetAtX(x);
+  }
 
   _click(x) {
-    const m = this.model();
-    const f = this._audioAtX(x, m);
-    const target = clickTuneTarget(m, f);
-    if (target != null && this.onTune) this.onTune(Math.round(target / 10) * 10);
+    if (this.onTune) this.onTune(Math.round(this._tuneTargetAtX(x, this.model()) / 10) * 10);
+  }
+
+  // Slide the waterfall history sideways by dx pixels so signals stay at
+  // their RF position when the dial moves.
+  _shift(dx) {
+    dx += this._shiftRem;
+    const px = Math.round(dx);
+    this._shiftRem = dx - px;
+    if (!px) return;
+    const WW = this.wfBuf.width, WH = this.wfBuf.height;
+    if (Math.abs(px) >= WW) { this.clear(); return; }
+    const bc = this.wfBuf.getContext('2d');
+    bc.drawImage(this.wfBuf, px, 0);
+    bc.fillStyle = BACKGROUND;
+    bc.fillRect(px > 0 ? 0 : WW + px, 0, Math.abs(px), WH);
+    this.avg = null;
   }
 
   draw() {
@@ -115,7 +141,10 @@ export class SpectrumWaterfall {
     }
     const W = this.spec.width, H = this.spec.height, d = devicePixelRatio || 1;
     const c = this.spec.getContext('2d');
-    c.fillStyle = '#05080b'; c.fillRect(0, 0, W, H);
+    c.fillStyle = BACKGROUND; c.fillRect(0, 0, W, H);
+
+    if (this._dial != null && m.dial !== this._dial) this._shift((this._dial - m.dial) / this.span * this.wfBuf.width);
+    this._dial = m.dial;
 
     let levels = null;
     if (an) {
@@ -125,32 +154,33 @@ export class SpectrumWaterfall {
       levels = new Float32Array(W);
       for (let x = 0; x < W; x++) {
         const f0 = this._audioAtX(x / W, m), f1 = this._audioAtX((x + 1) / W, m);
-        let b0 = Math.floor(Math.min(f0, f1) / binHz), b1 = Math.ceil(Math.max(f0, f1) / binHz);
-        b1 = Math.max(b0 + 1, b1);
+        const lo = Math.min(f0, f1), hi = Math.max(f0, f1);
         let mx = -200;
-        for (let b = b0; b < b1 && b < this.bins.length; b++) mx = Math.max(mx, this.bins[b]);
+        if (hi > 0) {
+          const b0 = Math.floor(Math.max(0, lo) / binHz), b1 = Math.max(b0 + 1, Math.ceil(hi / binHz));
+          for (let b = b0; b < b1 && b < this.bins.length; b++) mx = Math.max(mx, this.bins[b]);
+        }
         levels[x] = mx;
       }
       if (!this.avg || this.avg.length !== W) this.avg = Float32Array.from(levels);
       for (let x = 0; x < W; x++) this.avg[x] += (levels[x] - this.avg[x]) * 0.35;
     }
 
-    // passband shading
+    // passband shading (both sides of the dial for AM/FM)
     const pb = passbandEdges(m);
-    const xa = this._xAtAudio(pb.lo, m) * W, xb = this._xAtAudio(pb.hi, m) * W;
+    const xa = this._xAtAudio(sidebandOf(m.mode) ? pb.lo : -pb.hi, m) * W, xb = this._xAtAudio(pb.hi, m) * W;
     c.fillStyle = 'rgba(245,184,61,0.08)';
     c.fillRect(Math.min(xa, xb), 0, Math.abs(xb - xa), H);
 
-    // grid + RF labels
+    // grid + RF labels (kHz), stepped out from the dial frequency
     c.font = `${10 * d}px ${css('--mono')}`; c.textBaseline = 'top';
-    const step = this.span <= 4000 ? 500 : this.span <= 6000 ? 1000 : 2000;
-    for (let f = 0; f <= this.span; f += step) {
-      const x = this._xAtAudio(f, m) * W;
+    const step = this.span <= 8000 ? 1000 : this.span <= 12000 ? 2000 : 4000;
+    for (let off = -Math.floor(this.span / 2 / step) * step; off <= this.span / 2; off += step) {
+      const x = (0.5 + off / this.span) * W;
       c.strokeStyle = '#1b2530'; c.lineWidth = 1;
       c.beginPath(); c.moveTo(x + 0.5, 0); c.lineTo(x + 0.5, H); c.stroke();
-      const rf = rfAtAudio(m, f);
-      const label = rf != null ? (rf / 1e6).toFixed(rf >= 1e8 ? 4 : 4).replace(/0+$/, '').replace(/\.$/, '') : `${f}`;
-      c.fillStyle = '#56657a';
+      const label = ((m.dial + off) / 1e3).toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+      c.fillStyle = off ? '#56657a' : '#f5b83d';
       c.textAlign = x < 30 * d ? 'left' : x > W - 30 * d ? 'right' : 'center';
       c.fillText(label, x + (c.textAlign === 'left' ? 3 * d : c.textAlign === 'right' ? -3 * d : 0), 3 * d);
     }
@@ -173,24 +203,21 @@ export class SpectrumWaterfall {
       c.strokeStyle = '#8be3ff'; c.lineWidth = 1.2 * d; c.stroke();
     }
 
-    // markers: notch, contour, tuned spot
-    const marker = (f, color, dash) => {
-      const x = this._xAtAudio(f, m) * W;
+    // markers: notch, contour, and the dial frequency at the centre
+    const marker = (x, color, dash) => {
       c.strokeStyle = color; c.lineWidth = 1.5 * d; c.setLineDash(dash || []);
       c.beginPath(); c.moveTo(x, 14 * d); c.lineTo(x, H); c.stroke(); c.setLineDash([]);
     };
-    if (m.notch) marker(m.notchHz, '#ef4444', [4 * d, 3 * d]);
-    if (m.contour) marker(m.contourHz, '#a78bfa', [2 * d, 3 * d]);
-    if (/^CW/.test(m.mode)) marker(m.pitch, 'rgba(245,184,61,.9)');
+    if (m.notch) marker(this._xAtAudio(m.notchHz, m) * W, '#ef4444', [4 * d, 3 * d]);
+    if (m.contour) marker(this._xAtAudio(m.contourHz, m) * W, '#a78bfa', [2 * d, 3 * d]);
+    marker(W / 2, 'rgba(245,184,61,.9)');
 
     // hover readout
     if (this.hoverX != null) {
       const x = this.hoverX * W;
       c.strokeStyle = 'rgba(255,255,255,.35)'; c.lineWidth = 1;
       c.beginPath(); c.moveTo(x + 0.5, 0); c.lineTo(x + 0.5, H); c.stroke();
-      const f = this._audioAtX(this.hoverX, m);
-      const target = clickTuneTarget(m, f);
-      const txt = target != null ? `${(target / 1e3).toFixed(2)} kHz` : `${Math.round(f)} Hz`;
+      const txt = `${(this._tuneTargetAtX(this.hoverX, m) / 1e3).toFixed(2)} kHz`;
       c.font = `600 ${11 * d}px ${css('--mono')}`;
       const tw = c.measureText(txt).width + 10 * d;
       const bx = Math.min(W - tw - 2, Math.max(2, x + 6 * d));
@@ -228,7 +255,10 @@ export class SpectrumWaterfall {
   }
 
   clear() {
-    if (this.wfBuf) this.wfBuf.getContext('2d').clearRect(0, 0, this.wfBuf.width, this.wfBuf.height);
+    if (this.wfBuf) {
+      const bc = this.wfBuf.getContext('2d');
+      bc.fillStyle = BACKGROUND; bc.fillRect(0, 0, this.wfBuf.width, this.wfBuf.height);
+    }
     this.avg = null;
   }
 }
