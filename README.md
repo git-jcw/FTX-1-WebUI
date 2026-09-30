@@ -124,10 +124,12 @@ needs no server and no internet connection.
 
 ### Transmitting with the PC microphone
 
-1. On the radio, set the SSB (and AM/FM) **MOD SOURCE** to **REAR** (USB). Settings
-   differ by mode; check the FTX-1 manual.
-2. In Settings, choose the radio's audio output (USB Audio CODEC) and your PC
-   microphone.
+1. On the radio, set **MOD SOURCE** to **USB** (or **AUTO**, which uses USB when
+   keyed over CAT) for each mode you use: RADIO SETTING → MODE SSB, AM, FM and
+   DATA each have their own. With **MIC**, the radio transmits its own microphone
+   and ignores the PC; FTX Deck warns you when that's the case.
+2. In Settings, choose the radio's audio output (USB Audio CODEC, or USB Audio
+   Device (0d8c:0016)) and your PC microphone.
 3. Turn on **PC MIC**. Your mic is only sent to the radio while PTT is down.
 
 Keep an eye on ALC and PO the first time, and set the level with the **PC mic**

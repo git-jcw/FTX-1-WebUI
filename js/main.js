@@ -4,7 +4,7 @@ import { RadioService } from './radio.js';
 import { WebSerialTransport } from './cat/transport.js';
 import { MockRadioTransport } from './cat/mock-radio.js';
 import { BANDS, bandForFreq, bandDefault, widthTable, AGC_NAMES, PREAMP_NAMES_HF, preampBandType,
-  SQL_TYPE, CTCSS_TONES, DCS_CODES } from './cat/ftx1.js';
+  SQL_TYPE, CTCSS_TONES, DCS_CODES, modSourceMenu } from './cat/ftx1.js';
 import { AudioEngine, isVirtualDevice } from './audio/audio-engine.js';
 import { ArcMeter } from './ui/meters.js';
 import { SpectrumWaterfall, Oscilloscope, PassbandView } from './ui/scope.js';
@@ -292,9 +292,26 @@ $('tPcMic').onclick = async () => {
     if (!audio.state.radioOut) { banner('Choose the radio\'s audio output (USB Audio CODEC) in Settings first.', { error: true }); return; }
     await audio.startTxPath();
     pcMic = true;
+    modSourceGroup = null; checkModSource();
   } catch (e) { banner(`PC mic: ${e.message}`, { error: true }); }
   update();
 };
+
+// The PC mic only goes out on the air if the radio takes its transmit audio
+// from USB for the mode in use (MOD SOURCE USB, or AUTO when keyed over CAT).
+// Checked when PC MIC goes on and whenever the mode group changes.
+let modSourceGroup = null;
+async function checkModSource() {
+  if (!pcMic || !radio.state.connected) return;
+  const s = radio.state, group = modSourceMenu(s.split || s.active === 1 ? s.modeB : s.modeA)?.group ?? null;
+  if (group === modSourceGroup) return; // only ask the radio when the mode group changes
+  modSourceGroup = group;
+  const r = group && await radio.readModSource();
+  if (!r) return;
+  if (r.source === 'MIC' || r.source === 'Bluetooth') {
+    banner(`The radio's MOD SOURCE for ${r.group} is ${r.source}, so it transmits its ${r.source === 'MIC' ? 'own microphone' : 'Bluetooth audio'}, not the PC mic. On the radio, set RADIO SETTING → MODE ${r.group} → MOD SOURCE to USB (or AUTO).`, { error: true });
+  }
+}
 
 // ---------------- PTT (all the ways it can end) ----------------
 const ptt = $('btnPtt');
@@ -332,6 +349,7 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => {
   if (e.code === 'Space' && spaceDown) { spaceDown = false; keyUp(false); e.preventDefault(); }
 });
+radio.addEventListener('change', () => { if (pcMic) checkModSource(); });
 radio.addEventListener('change', () => {
   // If the radio stops transmitting on its own (timeout, disconnect), close the mic gate too.
   if (!radio.state.tx && audio.state.txActive) audio.setTxActive(false);});

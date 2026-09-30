@@ -2,7 +2,7 @@
 // UI code listens for 'change' events and reads `radio.state`.
 
 import { cmd, parse, RADIO_ID, calibrate, preampBandType, bandForFreq, bandDefault, BANDS,
-  METER, MENU, TUNER, TUNER_NAMES, tuneCommands, powerLimits, FIELD_BATTERY_MAX_W } from './cat/ftx1.js';
+  METER, MENU, TUNER, TUNER_NAMES, tuneCommands, powerLimits, FIELD_BATTERY_MAX_W, MOD_SOURCES, modSourceMenu } from './cat/ftx1.js';
 import { CatLink } from './cat/cat-link.js';
 
 const HOLD_MS = 700;       // ignore polled values this long after a local change
@@ -414,6 +414,15 @@ export class RadioService extends EventTarget {
     if (ok) this._patch({ tunerType: type });
     else this._patch({ tuning: false, tunerType: type, warning: tuneRejected(type, start) });
     return ok;
+  }
+
+  // Where the radio takes transmit audio from in the transmit VFO's mode:
+  // { group: 'SSB', source: 'MIC' }, or null if the mode has none or the radio won't say.
+  async readModSource() {
+    const s = this.state, m = modSourceMenu(s.split || s.active === 1 ? s.modeB : s.modeA);
+    if (!m || !this.link) return null;
+    const v = parse.menu(await this.link.read(cmd.readMenu(m.item)));
+    return v != null && MOD_SOURCES[v] ? { group: m.group, source: MOD_SOURCES[v] } : null;
   }
 
   // ---------------- auto tune ----------------

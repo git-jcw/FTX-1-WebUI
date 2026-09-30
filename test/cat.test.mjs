@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cmd, parse, calibrate, splitReplies, replyKey, widthTable, bandForFreq, bandDefault, BANDS,
-  MENU, TUNER, tuneCommands, powerLimits, SQL_TYPE, CTCSS_TONES, DCS_CODES } from '../js/cat/ftx1.js';
+  MENU, TUNER, tuneCommands, powerLimits, SQL_TYPE, CTCSS_TONES, DCS_CODES, modSourceMenu } from '../js/cat/ftx1.js';
 import { MockRadioTransport } from '../js/cat/mock-radio.js';
 import { CatLink } from '../js/cat/cat-link.js';
 import { RadioService } from '../js/radio.js';
@@ -444,4 +444,19 @@ test('the radio audio devices are never Chrome\'s "Default" or "Communications" 
   } finally {
     if (saved) Object.defineProperty(globalThis, 'navigator', saved); else delete globalThis.navigator;
   }
+});
+
+test('MOD SOURCE can be read for the transmit mode', async () => {
+  assert.deepEqual(modSourceMenu('USB'), { group: 'SSB', item: '010113' });
+  assert.deepEqual(modSourceMenu('FM-N'), { group: 'FM', item: '010312' });
+  assert.deepEqual(modSourceMenu('PSK'), { group: 'DATA', item: '010413' });
+  assert.equal(modSourceMenu('CW-U'), null, 'CW sends no audio');
+  const radio = new RadioService();
+  const t = new MockRadioTransport({ latencyMs: 1 });
+  t.menu['010113'] = 0; // SSB: MIC
+  await radio.connect(t, { demo: true });
+  assert.deepEqual(await radio.readModSource(), { group: 'SSB', source: 'MIC' });
+  await radio.setMode(0, 'DATA-U');
+  assert.deepEqual(await radio.readModSource(), { group: 'DATA', source: 'AUTO' });
+  await radio.disconnect();
 });

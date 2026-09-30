@@ -3,12 +3,15 @@
 //
 //   RX:  radio USB codec (input) ─┬─> analyser (waterfall/scope)
 //                                 └─> volume ─> PC speakers (AudioContext sink)
-//   TX:  PC microphone ─> mic level ─> gate (open only while PTT) ─> radio USB codec (output)
+//   TX:  PC microphone ─> mic level ─> gate (open only while PTT) ─> radio USB codec (output),
+//        in a second AudioContext of its own whose output device is the radio
 //        The microphone track itself is muted except while PTT is down.
 //
 // Chrome/Edge are required for output-device selection (setSinkId).
 
-const RADIO_LABEL = /usb audio codec|ftx|yaesu|burr-brown|pcm29/i;
+// How the radio's sound device can be named. Windows may call the FTX-1's codec
+// "USB Audio CODEC" or "USB Audio Device"; Chrome adds its USB ID (0d8c:0016).
+const RADIO_LABEL = /usb audio codec|0d8c:0016|ftx|yaesu|burr-brown|pcm29/i;
 const MIC_OFF_DELAY_MS = 80; // lets the TX gate finish closing before the mic is muted
 // Chrome's entries that stand for "the operating system's current default".
 export const isVirtualDevice = id => id === 'default' || id === 'communications';
@@ -25,8 +28,7 @@ export class AudioEngine extends EventTarget {
     this.micSource = null;
     this.micAnalyser = null;
     this.txGate = null;
-    this.txDest = null;
-    this.txElement = null;
+    this.txCtx = null;    // the TX path's own AudioContext, output = the radio
     this._micOffTimer = null;
     this.demoNodes = [];
     this.state = {
@@ -158,11 +160,12 @@ export class AudioEngine extends EventTarget {
   }
 
   // ---------------- transmit ----------------
-  // The TX path is built ahead of time with its gate closed, so keying is instant.
+  // The TX path has its own AudioContext whose output is the radio's USB audio
+  // device, so the mic never shares an engine with the receive audio that plays
+  // on the PC speakers. It's built ahead of time with its gate closed, so keying
+  // is instant.
   async startTxPath() {
     this.stopTxPath();
-    this._ensureContext();
-    await this.ctx.resume();
     try {
       this.micStream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -175,48 +178,45 @@ export class AudioEngine extends EventTarget {
       throw e;
     }
     this._setMicLive(false);
-    this.micSource = this.ctx.createMediaStreamSource(this.micStream);
-    this.micAnalyser = this.ctx.createAnalyser();
-    this.micAnalyser.fftSize = 1024;
-    this.txGate = this.ctx.createGain();
-    this.txGate.gain.value = 0;
-    this.txDest = this.ctx.createMediaStreamDestination();
-    this.micSource.connect(this.micAnalyser);
-    this.micSource.connect(this.txGate).connect(this.txDest);
-    this.txElement = new Audio();
-    this.txElement.srcObject = this.txDest.stream;
-    // The mic must reach the radio's USB output or nowhere: an audio element
-    // whose output can't be set plays on the default device, the PC speakers.
+    // The mic must reach the radio's USB output or nowhere.
     try {
-      if (!this.txElement.setSinkId) throw new Error('this browser can\'t choose an audio output device');
       // Device IDs belong to each site and can change, so look the radio up
       // again now, while the microphone is open and the device list is complete.
       await this.refreshDevices();
-      if (!this.state.radioOut) throw new Error('no radio audio output (USB Audio CODEC) was found');
-      await this.txElement.setSinkId(this.state.radioOut);
-      if (this.txElement.sinkId !== this.state.radioOut) throw new Error('the browser didn\'t switch to it');
+      if (!this.state.radioOut) throw new Error('no radio audio output (USB Audio CODEC / USB Audio Device) was found');
+      const ctx = this.txCtx = new AudioContext({ latencyHint: 'interactive' });
+      if (!ctx.setSinkId) throw new Error("this browser can't send audio to a chosen output device");
+      await ctx.setSinkId(this.state.radioOut);
+      if (ctx.sinkId !== this.state.radioOut) throw new Error("the browser didn't switch to it");
+      await ctx.resume();
+      this.micSource = ctx.createMediaStreamSource(this.micStream);
+      this.micAnalyser = ctx.createAnalyser();
+      this.micAnalyser.fftSize = 1024;
+      this.txGate = ctx.createGain();
+      this.txGate.gain.value = 0;
+      this.micSource.connect(this.micAnalyser);
+      this.micSource.connect(this.txGate).connect(ctx.destination);
     } catch (e) {
       this.stopTxPath();
       const msg = `Couldn't send the PC mic to the radio's USB audio output: ${e.message}. PC MIC has been left off. Check "Radio audio out" in Settings.`;
       this._patch({ error: msg });
       throw new Error(msg);
     }
-    await this.txElement.play().catch(() => {});
     this._emit();
   }
 
   stopTxPath() {
     this.setTxActive(false);
-    this.txElement?.pause();
     this.micStream?.getTracks().forEach(t => t.stop());
     this.micSource?.disconnect();
-    this.micStream = null; this.micSource = null; this.micAnalyser = null; this.txElement = null; this.txGate = null; this.txDest = null;
+    this.txCtx?.close().catch(() => {});
+    this.micStream = null; this.micSource = null; this.micAnalyser = null; this.txGate = null; this.txCtx = null;
   }
 
   get txReady() { return !!this.txGate; }
 
   setTxActive(on) {
-    if (this.txGate) this.txGate.gain.setTargetAtTime(on ? this.state.txLevel : 0, this.ctx.currentTime, 0.01);
+    if (this.txGate) this.txGate.gain.setTargetAtTime(on ? this.state.txLevel : 0, this.txGate.context.currentTime, 0.01);
     // Unkeyed, the mic is muted at the source once the gate has closed.
     clearTimeout(this._micOffTimer);
     if (on) this._setMicLive(true); else this._micOffTimer = setTimeout(() => this._setMicLive(false), MIC_OFF_DELAY_MS);
@@ -230,7 +230,7 @@ export class AudioEngine extends EventTarget {
   }
   setTxLevel(v) {
     this._patch({ txLevel: v });
-    if (this.txGate && this.state.txActive) this.txGate.gain.setTargetAtTime(v, this.ctx.currentTime, 0.02);
+    if (this.txGate && this.state.txActive) this.txGate.gain.setTargetAtTime(v, this.txGate.context.currentTime, 0.02);
   }
 
   micLevel() {

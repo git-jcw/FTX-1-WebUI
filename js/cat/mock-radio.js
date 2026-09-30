@@ -14,6 +14,8 @@ export class MockRadioTransport {
     this.tuneMs = tuneMs;
     this._tunerOn = false;
     this.menu = tuner == null ? {} : { '030701': tuner, '030702': tuner, '030704': 0 };
+    // MOD SOURCE for SSB, AM, FM and DATA: 3 = AUTO, which uses USB audio when keyed over CAT
+    Object.assign(this.menu, { '010113': 3, '010213': 3, '010312': 3, '010413': 3 });
     this.onData = () => {};
     this.onClose = () => {};
     this.label = 'Demo radio (simulated FTX-1 Optima)';

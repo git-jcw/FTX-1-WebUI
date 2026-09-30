@@ -56,7 +56,8 @@ Yaesu's [Virtual COM Port Driver Installation Manual](https://www.yaesu.com/File
 without installing anything. On macOS, if the radio's ports don't appear, install
 the driver from [Silicon Labs' CP210x driver page](https://www.silabs.com/software-and-tools/usb-to-uart-bridge-vcp-drivers?tab=downloads).
 
-**Audio needs no driver.** The radio's sound device, **USB Audio CODEC**, uses
+**Audio needs no driver.** The radio's sound device, named **USB Audio CODEC** or
+**USB Audio Device** (with the USB ID 0d8c:0016), uses
 the operating system's built-in USB audio support. Look for it under
 **Sound, video and game controllers** in Device Manager.
 
@@ -67,7 +68,8 @@ For how to start FTX Deck itself, see the [README](../README.md#running-it).
 ## Before you start
 
 - **Two USB connections come from one cable.** The radio appears as two COM
-  ports (CAT control) and a sound device called **USB Audio CODEC** (receive and
+  ports (CAT control) and a sound device called **USB Audio CODEC** or **USB Audio
+  Device (0d8c:0016)** (receive and
   transmit audio). FTX Deck uses both.
 - **Always pick the Enhanced COM port.** The Standard COM port's control lines
   can key the transmitter.
@@ -301,7 +303,7 @@ to run.
 | **TUNE** | Starts a tune cycle on whichever tuner the radio has selected: the Optima's internal tuner, an external tuner on the TUNER/LINEAR jack, or an ATAS antenna. The button reads **TUNING…** while it runs and returns to **TUNE** when the radio stops sending its tuning carrier. Press it again during a cycle to stop it. If the radio refuses, the banner says what its tuner is set to and what to check. |
 | **PROC** | The speech processor on/off; set its level with the **Proc** slider. |
 | **VOX** | The radio's voice-operated transmit on/off. |
-| **PC MIC** | Sends your PC microphone to the radio while PTT is down. The microphone is muted at all other times, so **Mic in** only moves while you transmit. Needs the radio's MOD SOURCE set to REAR/USB and the audio devices chosen in Settings. |
+| **PC MIC** | Sends your PC microphone to the radio while PTT is down. The microphone is muted at all other times, so **Mic in** only moves while you transmit. Needs the audio devices chosen in Settings, and the radio's **MOD SOURCE** set to **USB** or **AUTO** for each mode you use (RADIO SETTING → MODE SSB, AM, FM, DATA); with **MIC** the radio transmits its own microphone instead, and FTX Deck warns you. |
 | **AUTO TUNE** | When on, runs a tune cycle by itself once your transmit frequency has moved 10 kHz or more from where the tuner last ran (or you've changed band) and then stayed put. |
 | **after … on frequency** | How long the frequency must stay still before auto tune runs: 2, 3, 5 or 10 seconds. |
 | **Power** | Transmit power. The range follows the radio: 5–100 W on the Optima (5–50 W on 2 m and 70 cm, less in AM), 0.5–10 W on the Field head (0.5–6 W on its battery). The radio keeps a separate power setting per band. |
@@ -367,8 +369,8 @@ closes the window.
 
 | Setting | What it does |
 |---|---|
-| **Radio audio in (receive)** | The radio's audio input on the PC, normally **USB Audio CODEC**. Picked automatically when found. |
-| **Radio audio out (transmit)** | The radio's audio output on the PC, also **USB Audio CODEC**. Used by PC MIC. |
+| **Radio audio in (receive)** | The radio's audio input on the PC: **USB Audio CODEC**, or **Microphone (USB Audio Device) (0d8c:0016)**. Picked automatically when found. |
+| **Radio audio out (transmit)** | The radio's audio output on the PC: **USB Audio CODEC**, or **Speakers (USB Audio Device) (0d8c:0016)**. Used by PC MIC. |
 | **PC speakers** | Where the receive audio plays. |
 | **PC microphone** | The microphone PC MIC sends to the radio. |
 | **Refresh device list** | Re-reads the list of sound devices, for example after plugging something in. The browser may ask for microphone permission. |

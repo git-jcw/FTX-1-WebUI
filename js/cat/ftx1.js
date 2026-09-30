@@ -46,6 +46,18 @@ export const TUNER = { INT: 0, INT_FAST: 1, EXT: 2, ATAS: 3 };
 export const TUNER_NAMES = ['INT', 'INT (FAST)', 'EXT', 'ATAS'];
 export const MENU = { TUNER_ANT1: '030701', TUNER_ANT2: '030702', HF_ANT: '030704' };
 
+// Where each mode takes its transmit audio from (RADIO SETTING -> MODE … -> MOD SOURCE).
+// AUTO follows how the radio is keyed, and keying over CAT (as FTX Deck does) uses USB.
+export const MOD_SOURCES = ['MIC', 'USB', 'Bluetooth', 'AUTO'];
+const MOD_SOURCE_MENU = { SSB: '010113', AM: '010213', FM: '010312', DATA: '010413' };
+// The MOD SOURCE menu item and its group name for a mode, or null for modes
+// that don't send audio (CW, RTTY).
+export function modSourceMenu(mode) {
+  const group = /^(LSB|USB)$/.test(mode) ? 'SSB' : /^AM/.test(mode) ? 'AM' : /^FM/.test(mode) ? 'FM'
+    : /^(DATA|PSK)/.test(mode) ? 'DATA' : null;
+  return group ? { group, item: MOD_SOURCE_MENU[group] } : null;
+}
+
 // AC commands that start / stop a tune cycle for a tuner type, in the order to
 // try them; the radio answers "?;" to a form it doesn't take, which does nothing.
 // AC P1 P2 P3: P1 0 internal / 1 external port, P2 0 tuner / 2 ATAS, P3 0 stop / 3 start.
