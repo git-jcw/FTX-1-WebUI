@@ -13,6 +13,8 @@
 // "USB Audio CODEC" or "USB Audio Device"; Chrome adds its USB ID (0d8c:0016).
 const RADIO_LABEL = /usb audio codec|0d8c:0016|ftx|yaesu|burr-brown|pcm29/i;
 const MIC_OFF_DELAY_MS = 80; // lets the TX gate finish closing before the mic is muted
+const TX_DEVICE_CHECK_MS = 300; // how long to wait for the radio's output to report a problem
+const DEVICE_BUSY = "the radio's audio output couldn't be opened. It may be in use by another program or another FTX Deck tab, or set to exclusive mode in Windows sound settings";
 // Chrome's entries that stand for "the operating system's current default".
 export const isVirtualDevice = id => id === 'default' || id === 'communications';
 
@@ -184,11 +186,21 @@ export class AudioEngine extends EventTarget {
       // again now, while the microphone is open and the device list is complete.
       await this.refreshDevices();
       if (!this.state.radioOut) throw new Error('no radio audio output (USB Audio CODEC / USB Audio Device) was found');
-      const ctx = this.txCtx = new AudioContext({ latencyHint: 'interactive' });
+      const ctx = this.txCtx = new AudioContext({ latencyHint: 'interactive', sampleRate: 48000 });
       if (!ctx.setSinkId) throw new Error("this browser can't send audio to a chosen output device");
+      // If the device can't be opened (in use by another program, exclusive mode,
+      // an unsupported format), Chrome reports an error and plays on the default
+      // output instead: the PC speakers. So listen for that, before and after start.
+      let deviceError = false;
+      ctx.addEventListener('error', () => {
+        deviceError = true;
+        if (this.txCtx === ctx) this._txDeviceFailed();
+      });
       await ctx.setSinkId(this.state.radioOut);
       if (ctx.sinkId !== this.state.radioOut) throw new Error("the browser didn't switch to it");
       await ctx.resume();
+      await new Promise(r => setTimeout(r, TX_DEVICE_CHECK_MS));
+      if (deviceError) throw new Error(DEVICE_BUSY);
       this.micSource = ctx.createMediaStreamSource(this.micStream);
       this.micAnalyser = ctx.createAnalyser();
       this.micAnalyser.fftSize = 1024;
@@ -203,6 +215,13 @@ export class AudioEngine extends EventTarget {
       throw new Error(msg);
     }
     this._emit();
+  }
+
+  // The radio's output failed after PC MIC was already on: shut it off rather
+  // than let Chrome carry on playing the mic on the PC speakers.
+  _txDeviceFailed() {
+    this.stopTxPath();
+    this._patch({ error: `Couldn't send the PC mic to the radio's USB audio output: ${DEVICE_BUSY}. PC MIC has been turned off.` });
   }
 
   stopTxPath() {

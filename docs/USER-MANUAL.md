@@ -455,6 +455,13 @@ its command: that means the radio refused it.
   disk, because the browser doesn't keep the microphone permission there. Use
   the hosted version at https://git-jcw.github.io/FTX-1-WebUI/ or the
   `http://localhost` version instead.
+- **PC MIC needs the radio's audio output to itself.** If another program (WSJT-X,
+  fldigi and the like) or another FTX Deck tab holds the radio's playback device,
+  or Windows has it in exclusive mode, the browser can't open it and PC MIC turns
+  itself off with a message. Close the other program or tab, or in Windows open
+  **Sound settings → More sound settings → Playback → the radio's Speakers →
+  Properties → Advanced**, untick **Allow applications to take exclusive
+  control**, and set the format to **16 bit, 48000 Hz**.
 - **Some radio reports are unconfirmed.** A few readings (the PO and SWR meter
   scales in particular) come from documentation rather than measurements on a
   real radio. If something looks wrong, **Diagnostics → Copy** and report it.
