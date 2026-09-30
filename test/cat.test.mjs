@@ -1,7 +1,7 @@
 // Run with: node --test test/
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cmd, parse, calibrate, splitReplies, replyKey, widthTable, bandForFreq } from '../js/cat/ftx1.js';
+import { cmd, parse, calibrate, splitReplies, replyKey, widthTable, bandForFreq, bandDefault, BANDS } from '../js/cat/ftx1.js';
 import { MockRadioTransport } from '../js/cat/mock-radio.js';
 import { CatLink } from '../js/cat/cat-link.js';
 import { RadioService } from '../js/radio.js';
@@ -77,6 +77,23 @@ test('meter calibration', () => {
   assert.equal(bandForFreq(14074000).id, '20');
 });
 
+test('band defaults follow the license class', () => {
+  const at = (id, license) => bandDefault(BANDS.find(b => b.id === id), license);
+  assert.deepEqual(at('20', 'general'), { freq: 14225000, mode: 'USB', voice: true });
+  assert.deepEqual(at('20', 'extra'), { freq: 14150000, mode: 'USB', voice: true });
+  assert.deepEqual(at('80', 'general'), { freq: 3803000, mode: 'LSB', voice: true }, 'LSB stays 3 kHz above the edge');
+  assert.deepEqual(at('40', 'extra'), { freq: 7128000, mode: 'LSB', voice: true });
+  assert.deepEqual(at('60', 'general'), { freq: 5332000, mode: 'USB', voice: true });
+  assert.deepEqual(at('10', 'technician'), { freq: 28300000, mode: 'USB', voice: true });
+  assert.deepEqual(at('2', 'technician'), { freq: 144100000, mode: 'USB', voice: true });
+  assert.deepEqual(at('20', 'technician'), { freq: 14250000, mode: 'USB', voice: false });
+  assert.deepEqual(at('30', 'extra'), { freq: 10136000, mode: 'DATA-U', voice: false });
+  for (const b of BANDS) for (const l of ['technician', 'general', 'extra']) {
+    const d = bandDefault(b, l);
+    assert.ok(d.freq >= b.start && d.freq <= b.end, `${b.id} ${l} in band`);
+  }
+});
+
 test('CatLink: reads, rejected sets, and coalescing against the mock radio', async () => {
   const t = new MockRadioTransport({ latencyMs: 1 });
   const link = new CatLink(t, { readTimeoutMs: 100, setGapMs: 5 });
@@ -127,9 +144,28 @@ test('RadioService end-to-end with the mock radio', async () => {
   await radio.setPtt(false);
   assert.equal(t.s.TX, 0);
 
+  radio.state.license = 'extra';
+  radio.gotoBand('20');
+  await radio.setAf(100); // flush the queue
+  assert.equal(t.s.FA, 14150000);
+  assert.equal(t.s.MD[0], '2');
+
   await radio.disconnect();
   assert.equal(radio.state.connected, false);
+  assert.equal(radio.state.demo, false, 'leaving demo clears the demo flag');
   assert.ok(!t.log.includes('ST1;'), 'never uses ST for split');
+});
+
+test('SWR is reported while tuning', async () => {
+  const radio = new RadioService();
+  const t = new MockRadioTransport({ latencyMs: 1 });
+  await radio.connect(t, { demo: true });
+  await radio.tune();
+  await new Promise(r => setTimeout(r, 300));
+  assert.equal(radio.state.tuning, true);
+  assert.ok(radio.meters().swr > 1, `swr ${radio.meters().swr}`);
+  await radio.tune();
+  await radio.disconnect();
 });
 
 test('TX watchdog unkeys', async () => {

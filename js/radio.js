@@ -1,7 +1,7 @@
 // RadioService: owns the CAT link, polls the FTX-1, and exposes setters.
 // UI code listens for 'change' events and reads `radio.state`.
 
-import { cmd, parse, RADIO_ID, calibrate, preampBandType, bandForFreq, BANDS } from './cat/ftx1.js';
+import { cmd, parse, RADIO_ID, calibrate, preampBandType, bandForFreq, bandDefault, BANDS } from './cat/ftx1.js';
 import { CatLink } from './cat/cat-link.js';
 
 const HOLD_MS = 700;       // ignore polled values this long after a local change
@@ -20,7 +20,7 @@ export function initialState() {
     contour: false, contourHz: 1000, narrow: false,
     power: 50, mic: 50, proc: false, procLevel: 50, amc: 50, vox: false, voxGain: 50, mon: 50,
     keySpeed: 20, keyPitch: 600,
-    txTimeoutS: 180, txStartedAt: 0,
+    txTimeoutS: 180, txStartedAt: 0, license: 'general',
     stats: null,
   };
 }
@@ -92,7 +92,7 @@ export class RadioService extends EventTarget {
     const t = this.transport;
     this.link = null; this.transport = null;
     if (t) { t.onClose = () => {}; await t.close().catch(() => {}); }
-    this._patch({ connected: false, connecting: false, tx: false, tuning: false, sRaw: 0, poRaw: 0, swrRaw: 0, alcRaw: 0 });
+    this._patch({ connected: false, connecting: false, demo: false, tx: false, tuning: false, sRaw: 0, poRaw: 0, swrRaw: 0, alcRaw: 0 });
   }
 
   _lost(reason) {
@@ -237,7 +237,9 @@ export class RadioService extends EventTarget {
     return this.link?.set(cmd.swap());
   }
 
-  // Band stacking: remember the last frequency/mode used on each band.
+  // Band stacking: remember the last frequency/mode used on each band. A band's
+  // first visit, or picking the band you're already on, goes to its default
+  // for the license class.
   gotoBand(bandId) {
     const band = BANDS.find(b => b.id === bandId); if (!band) return;
     const v = this.state.active;
@@ -245,7 +247,8 @@ export class RadioService extends EventTarget {
     const stack = loadStack();
     if (cur) stack[cur.id] = { freq: this.activeFreq, mode: this.activeMode };
     saveStack(stack);
-    const target = stack[band.id] || { freq: band.def, mode: band.mode };
+    const def = bandDefault(band, this.state.license);
+    const target = cur?.id === band.id ? def : stack[band.id] || def;
     this.setFreq(v, target.freq);
     this.setMode(v, target.mode);
   }
@@ -329,7 +332,7 @@ export class RadioService extends EventTarget {
     return {
       sRaw: s.sRaw, sLabel: calibrate.sLabel(s.sRaw), sDb: calibrate.sDb(s.sRaw),
       poWatts: calibrate.poWatts(s.poRaw, s.head === 'optima' ? 100 : 10),
-      swr: s.tx ? calibrate.swr(s.swrRaw) : 1,
+      swr: s.tx || s.tuning ? calibrate.swr(s.swrRaw) : 1,
       alc: calibrate.alcFraction(s.alcRaw),
     };
   }

@@ -16,6 +16,9 @@ No install and no drivers beyond the radio's own USB driver. Nothing leaves your
 - **VFO A (MAIN) and VFO B (SUB):** scroll over any digit to tune by that digit, or
   double-click to type a frequency. Also A→B, B→A, swap, and split (RX on A, TX on B).
 - **Band buttons with band stacking:** each band remembers its last frequency and mode.
+  A band's first visit goes to the lowest SSB voice frequency for your US license
+  class (Technician, General or Amateur Extra, chosen in Settings). Click the band
+  you're already on to go back there.
 - **All the modes:** LSB, USB, CW, AM, FM, DATA, RTTY, PSK and so on.
 - **Meters:** S, PO, SWR and ALC, driven by live readings from the radio.
 - **Spectrum and waterfall of the receive audio.** Click a signal to tune it in:

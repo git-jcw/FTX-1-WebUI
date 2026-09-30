@@ -179,6 +179,7 @@ input[type=range] { width: 100%; accent-color: var(--amber); height: 18px; backg
 .grid-buttons { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
 #modes { grid-template-columns: repeat(4, 1fr); }
 .grid-buttons .btn { padding: 6px 4px; font: 500 12.5px var(--mono); }
+.grid-buttons .btn.no-voice:not(.active) { color: var(--text-faint); }
 .rxlevels { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
 .rxlevels .row { grid-template-columns: 76px 1fr 64px auto; margin-top: 6px; }
 

@@ -24,25 +24,44 @@ export const PREAMP_NAMES_HF = ['IPO', 'AMP1', 'AMP2'];
 export const METER = { MAIN_S: 1, SUB_S: 2, COMP: 3, ALC: 4, PO: 5, SWR: 6, ID: 7, VDD: 8 };
 
 // Bands for the band buttons. `start`/`end` are the band edges used to
-// decide which band a frequency is in; `def` is the first-visit frequency.
+// decide which band a frequency is in; `def`/`mode` are the fallback
+// first-visit frequency and mode. `phone` is the lower edge of the US phone
+// segment for each license class (FCC Part 97.305); a class that isn't listed
+// has no voice privileges on that band.
+const ALL = hz => ({ technician: hz, general: hz, extra: hz });
+const GEN = (general, extra = general) => ({ general, extra });
 export const BANDS = [
-  { id: '160', label: '160', start: 1800000, end: 2000000, def: 1900000, mode: 'LSB' },
-  { id: '80', label: '80', start: 3500000, end: 4000000, def: 3750000, mode: 'LSB' },
-  { id: '60', label: '60', start: 5330000, end: 5410000, def: 5357000, mode: 'USB' },
-  { id: '40', label: '40', start: 7000000, end: 7300000, def: 7150000, mode: 'LSB' },
-  { id: '30', label: '30', start: 10100000, end: 10150000, def: 10136000, mode: 'DATA-U' },
-  { id: '20', label: '20', start: 14000000, end: 14350000, def: 14250000, mode: 'USB' },
-  { id: '17', label: '17', start: 18068000, end: 18168000, def: 18130000, mode: 'USB' },
-  { id: '15', label: '15', start: 21000000, end: 21450000, def: 21300000, mode: 'USB' },
-  { id: '12', label: '12', start: 24890000, end: 24990000, def: 24950000, mode: 'USB' },
-  { id: '10', label: '10', start: 28000000, end: 29700000, def: 28400000, mode: 'USB' },
-  { id: '6', label: '6', start: 50000000, end: 54000000, def: 50125000, mode: 'USB' },
-  { id: '2', label: '2', start: 144000000, end: 148000000, def: 146520000, mode: 'FM' },
-  { id: '70', label: '70cm', start: 420000000, end: 450000000, def: 446000000, mode: 'FM' },
+  { id: '160', label: '160', start: 1800000, end: 2000000, def: 1900000, mode: 'LSB', phone: GEN(1800000) },
+  { id: '80', label: '80', start: 3500000, end: 4000000, def: 3750000, mode: 'LSB', phone: GEN(3800000, 3600000) },
+  // 60 m is channelised: this is the dial frequency of the lowest channel.
+  { id: '60', label: '60', start: 5330000, end: 5410000, def: 5357000, mode: 'USB', phone: GEN(5332000) },
+  { id: '40', label: '40', start: 7000000, end: 7300000, def: 7150000, mode: 'LSB', phone: GEN(7175000, 7125000) },
+  { id: '30', label: '30', start: 10100000, end: 10150000, def: 10136000, mode: 'DATA-U' }, // no phone for anyone
+  { id: '20', label: '20', start: 14000000, end: 14350000, def: 14250000, mode: 'USB', phone: GEN(14225000, 14150000) },
+  { id: '17', label: '17', start: 18068000, end: 18168000, def: 18130000, mode: 'USB', phone: GEN(18110000) },
+  { id: '15', label: '15', start: 21000000, end: 21450000, def: 21300000, mode: 'USB', phone: GEN(21275000, 21200000) },
+  { id: '12', label: '12', start: 24890000, end: 24990000, def: 24950000, mode: 'USB', phone: GEN(24930000) },
+  { id: '10', label: '10', start: 28000000, end: 29700000, def: 28400000, mode: 'USB', phone: ALL(28300000) },
+  { id: '6', label: '6', start: 50000000, end: 54000000, def: 50125000, mode: 'USB', phone: ALL(50100000) },
+  { id: '2', label: '2', start: 144000000, end: 148000000, def: 146520000, mode: 'FM', phone: ALL(144100000) },
+  // Phone is legal from 420 MHz, but SSB lives at the 432.100 calling frequency.
+  { id: '70', label: '70cm', start: 420000000, end: 450000000, def: 446000000, mode: 'FM', phone: ALL(432100000) },
 ];
 
 export function bandForFreq(hz) {
   return BANDS.find(b => hz >= b.start && hz <= b.end) || null;
+}
+
+// First-visit frequency and mode for a band: the lowest SSB voice dial
+// frequency the license class may use. An LSB signal sits below the dial, so
+// LSB bands start 3 kHz above the segment edge. Bands with no voice privileges
+// for the class fall back to `def`/`mode` with voice: false.
+const LSB_MARGIN = 3000;
+export function bandDefault(band, license) {
+  const edge = band.phone?.[license];
+  if (edge == null) return { freq: band.def, mode: band.mode, voice: false };
+  const lsb = edge < 10000000 && band.id !== '60';
+  return { freq: lsb ? edge + LSB_MARGIN : edge, mode: lsb ? 'LSB' : 'USB', voice: true };
 }
 
 // ---------- helpers ----------

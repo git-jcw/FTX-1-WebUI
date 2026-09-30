@@ -3,7 +3,7 @@
 import { RadioService } from './radio.js';
 import { WebSerialTransport } from './cat/transport.js';
 import { MockRadioTransport } from './cat/mock-radio.js';
-import { BANDS, bandForFreq, widthTable, AGC_NAMES, PREAMP_NAMES_HF, preampBandType } from './cat/ftx1.js';
+import { BANDS, bandForFreq, bandDefault, widthTable, AGC_NAMES, PREAMP_NAMES_HF, preampBandType } from './cat/ftx1.js';
 import { AudioEngine } from './audio/audio-engine.js';
 import { ArcMeter } from './ui/meters.js';
 import { SpectrumWaterfall, Oscilloscope, PassbandView } from './ui/scope.js';
@@ -16,10 +16,11 @@ window.ftx = { radio, audio }; // handy from the browser console
 
 // ---------------- settings (per browser) ----------------
 const SETTINGS_KEY = 'ftxdeck.settings.v1';
-const settings = Object.assign({ baud: 38400, tot: 180, spacePtt: false, latchPtt: false, step: 100, span: 4000, floor: -112, range: 62, speed: 2 },
+const settings = Object.assign({ baud: 38400, tot: 180, license: 'general', spacePtt: false, latchPtt: false, step: 100, span: 4000, floor: -112, range: 62, speed: 2 },
   (() => { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch { return {}; } })());
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* ignore */ } };
 radio.state.txTimeoutS = settings.tot;
+radio.state.license = settings.license;
 
 // ---------------- banner ----------------
 function banner(text, { error = false } = {}) {
@@ -42,6 +43,7 @@ $('btnConnect').onclick = async () => {
     return;
   }
   try {
+    if (radio.state.demo) await leaveDemoAudio();
     const t = new WebSerialTransport({ baud: +settings.baud });
     await radio.connect(t);
     banner(radio.state.warning);
@@ -52,14 +54,22 @@ $('btnConnect').onclick = async () => {
   }
 };
 
+// Demo starts with the speakers muted; put the mute back how it was on the way out.
+let mutedBeforeDemo = false;
+async function leaveDemoAudio() {
+  if (audio.state.demo) { await audio.stopRx(); scope.clear(); }
+  audio.setMuted(mutedBeforeDemo);
+}
+
 $('btnDemo').onclick = async () => {
   if (radio.state.demo) {
     await radio.disconnect();
-    if (audio.state.demo) await audio.stopRx();
+    await leaveDemoAudio();
     return;
   }
   await radio.connect(new MockRadioTransport(), { demo: true });
   banner('Demo mode: a simulated FTX-1 Optima and a synthetic band. Nothing is sent to a real radio.');
+  mutedBeforeDemo = audio.state.muted;
   await audio.startDemo();
   audio.setMuted(true);
 };
@@ -129,6 +139,11 @@ for (const b of BANDS) {
   btn.onclick = () => radio.gotoBand(b.id);
   bandBox.append(btn);
 }
+const LICENSE_LABEL = { technician: 'Technician', general: 'General', extra: 'Amateur Extra' };
+for (const [value, label] of Object.entries(LICENSE_LABEL)) {
+  const o = document.createElement('option'); o.value = value; o.textContent = label;
+  $('setLicense').append(o);
+}
 const UI_MODES = ['LSB', 'USB', 'CW-U', 'CW-L', 'AM', 'FM', 'DATA-U', 'DATA-L', 'RTTY-L', 'PSK', 'FM-N', 'DATA-FM'];
 const MODE_LABEL = { 'CW-U': 'CW', 'DATA-U': 'DATA', 'DATA-FM': 'D-FM' };
 const modeBox = $('modes');
@@ -163,7 +178,7 @@ function bind(rangeId, outId, get, set, fmt = v => v) {
   bindings.push(() => {
     const v = get();
     if (v == null) return;
-    if (!dragging && document.activeElement !== r && +r.value !== v) r.value = String(v);
+    if (!dragging && +r.value !== v) r.value = String(v);
     if (o && !dragging) o.textContent = fmt(v);
   });
 }
@@ -303,6 +318,7 @@ function fillAudioSelects() {
 $('btnSettings').onclick = () => {
   $('setBaud').value = String(settings.baud);
   $('setTot').value = String(settings.tot);
+  $('setLicense').value = settings.license;
   $('setSpacePtt').checked = settings.spacePtt;
   $('setLatchPtt').checked = settings.latchPtt;
   fillAudioSelects();
@@ -311,6 +327,7 @@ $('btnSettings').onclick = () => {
 $('btnListDevices').onclick = async () => { await audio.refreshDevices({ askPermission: true }); fillAudioSelects(); };
 $('setBaud').onchange = e => { settings.baud = +e.target.value; saveSettings(); };
 $('setTot').onchange = e => { settings.tot = +e.target.value; radio.state.txTimeoutS = settings.tot; saveSettings(); };
+$('setLicense').onchange = e => { settings.license = radio.state.license = e.target.value; saveSettings(); update(); };
 $('setSpacePtt').onchange = e => { settings.spacePtt = e.target.checked; saveSettings(); update(); };
 $('setLatchPtt').onchange = e => { settings.latchPtt = e.target.checked; saveSettings(); update(); };
 for (const [id, key] of [['setRadioIn', 'radioIn'], ['setRadioOut', 'radioOut'], ['setSpeakers', 'speakers'], ['setMic', 'mic']]) {
@@ -400,7 +417,12 @@ function update() {
 
   // band/mode buttons
   const curBand = bandForFreq(radio.activeFreq)?.id;
-  for (const b of bandBox.children) b.classList.toggle('active', b.dataset.band === curBand);
+  for (const b of bandBox.children) {
+    b.classList.toggle('active', b.dataset.band === curBand);
+    const voice = bandDefault(BANDS.find(x => x.id === b.dataset.band), s.license).voice;
+    b.classList.toggle('no-voice', !voice);
+    b.title = voice ? '' : `No SSB voice privileges here for ${LICENSE_LABEL[s.license] || 'this license'}; tunes to the band's general default`;
+  }
   for (const b of modeBox.children) b.classList.toggle('active', b.dataset.mode === radio.activeMode);
 
   // width slider range follows the mode's table
