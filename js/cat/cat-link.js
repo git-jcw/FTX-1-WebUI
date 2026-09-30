@@ -31,13 +31,15 @@ export class CatLink {
     return this._enqueue({ command, expect: replyKey(command), priority });
   }
 
-  // Set: returns Promise<boolean> (false if the radio answered "?;")
-  set(command, { coalesce = null } = {}) {
+  // Set: returns Promise<boolean> (false if the radio answered "?;").
+  // `gapMs` waits longer than usual for that "?;", for sets whose caller
+  // needs to be sure whether the radio took the command.
+  set(command, { coalesce = null, gapMs = null } = {}) {
     if (coalesce) {
       const old = this._queue.find(q => q.coalesce === coalesce);
       if (old) { old.command = command; return old.promise; }
     }
-    return this._enqueue({ command, expect: null, priority: true, coalesce });
+    return this._enqueue({ command, expect: null, priority: true, coalesce, gapMs });
   }
 
   _enqueue(item) {
@@ -78,7 +80,7 @@ export class CatLink {
   async _run(item) {
     const result = await new Promise(resolve => {
       const done = v => { clearTimeout(timer); this._pending = null; resolve(v); };
-      const waitMs = item.expect ? this.readTimeoutMs : this.setGapMs;
+      const waitMs = item.expect ? this.readTimeoutMs : (item.gapMs ?? this.setGapMs);
       const timer = setTimeout(() => {
         if (item.expect) { this.stats.timeouts++; done(null); } else done(true);
       }, waitMs);

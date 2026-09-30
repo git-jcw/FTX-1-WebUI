@@ -1,0 +1,69 @@
+/* Colour themes, chosen in Settings. Each overrides the tokens defined on
+   :root in app.css (the default "Shack" theme). Keep every colour #rrggbb:
+   the canvases read these tokens too and derive tints from them. */
+
+/* Daylight: light, for a bright room or a sunny operating position. */
+:root[data-theme="daylight"] {
+  --bg: #e9edf2; --panel: #ffffff; --panel-2: #f4f6f9; --line: #d5dce5; --line-2: #c3ccd7;
+  --text: #16202b; --text-dim: #536274; --text-faint: #7d8b9c;
+  --amber: #b45309; --amber-dim: #e0a458; --on-amber: #ffffff; --on-red: #ffffff;
+  --cyan: #0e7490; --green: #15803d; --red: #dc2626; --red-deep: #fca5a5;
+  --lcd: #e3f1e8; --lcd-text: #14532d; --focus: #0e7490; --contour: #7c3aed; --shadow: #64748b;
+  --ptt-top: #fee2e2; --ptt-bottom: #fecaca; --ptt-text: #991b1b;
+  --scope-bg: #f8fafc; --scope-grid: #d9e0e8; --scope-grid-2: #eaeef3; --scope-text: #7d8b9c;
+  --trace: #0e7490; --trace-fill: #0891b2; --osc: #15803d;
+  --wf-0: #f8fafc; --wf-1: #eef3fb; --wf-2: #cfe0f7; --wf-3: #8fb4ea; --wf-4: #2f5fd0; --wf-5: #6d28d9; --wf-6: #111827;
+  color-scheme: light;
+}
+
+/* Night red: red on black, to keep your night vision in a dark shack. */
+:root[data-theme="nightred"] {
+  --bg: #070202; --panel: #110404; --panel-2: #0c0303; --line: #2a0b0b; --line-2: #3d1111;
+  --text: #e8493c; --text-dim: #a8342b; --text-faint: #6e241e;
+  --amber: #ff3b2f; --amber-dim: #8a1f18; --on-amber: #110404; --on-red: #110404;
+  --cyan: #d9463a; --green: #e0463a; --red: #ff2a1a; --red-deep: #5c120c;
+  --lcd: #140404; --lcd-text: #ff4a3a; --focus: #ff3b2f; --contour: #ff8a70; --shadow: #000000;
+  --ptt-top: #3a0a08; --ptt-bottom: #220605; --ptt-text: #ff6a5a;
+  --scope-bg: #050101; --scope-grid: #2a0a08; --scope-grid-2: #1a0605; --scope-text: #6e241e;
+  --trace: #ff5a4a; --trace-fill: #c0281c; --osc: #ff4a3a;
+  --wf-0: #050101; --wf-1: #2a0503; --wf-2: #5c0b06; --wf-3: #9c140b; --wf-4: #d62a18; --wf-5: #ff5a3a; --wf-6: #ffb09a;
+}
+
+/* Green phosphor: an old monochrome terminal or scope tube. */
+:root[data-theme="phosphor"] {
+  --bg: #020a04; --panel: #06120a; --panel-2: #040d07; --line: #0f2a17; --line-2: #174022;
+  --text: #72ff9e; --text-dim: #40c068; --text-faint: #2a7a43;
+  --amber: #39ff6e; --amber-dim: #1d7a39; --on-amber: #021006; --on-red: #1a0302;
+  --cyan: #7dffb0; --green: #39ff6e; --red: #ff5a4a; --red-deep: #4a1410;
+  --lcd: #031008; --lcd-text: #5dff8c; --focus: #7dffb0; --contour: #c4ff5a; --shadow: #000000;
+  --ptt-top: #2a0c0a; --ptt-bottom: #1a0705; --ptt-text: #ff8a7a;
+  --scope-bg: #010603; --scope-grid: #0c2413; --scope-grid-2: #071a0d; --scope-text: #2a7a43;
+  --trace: #8cffae; --trace-fill: #2bd65f; --osc: #39ff6e;
+  --wf-0: #010603; --wf-1: #032a10; --wf-2: #065a22; --wf-3: #0f9a3a; --wf-4: #39e063; --wf-5: #9cff9a; --wf-6: #eaffea;
+}
+
+/* Nixie: warm orange glow and brown panels, like valve-era gear. */
+:root[data-theme="nixie"] {
+  --bg: #120c07; --panel: #1c130b; --panel-2: #160f09; --line: #3a2816; --line-2: #4e361d;
+  --text: #f3dcc0; --text-dim: #b8977a; --text-faint: #7d624a;
+  --amber: #ff8a2a; --amber-dim: #9a4f16; --on-amber: #1a0d05; --on-red: #ffffff;
+  --cyan: #e8b86a; --green: #c9d86a; --red: #ff4a2a; --red-deep: #6b1d0e;
+  --lcd: #1a0d05; --lcd-text: #ff9a3c; --focus: #ff8a2a; --contour: #e8b86a; --shadow: #000000;
+  --ptt-top: #3a120a; --ptt-bottom: #240b06; --ptt-text: #ffb08a;
+  --scope-bg: #0d0804; --scope-grid: #2e1f11; --scope-grid-2: #20150b; --scope-text: #7d624a;
+  --trace: #ffc07a; --trace-fill: #ff8a2a; --osc: #ff9a3c;
+  --wf-0: #0d0804; --wf-1: #2e1406; --wf-2: #5c260a; --wf-3: #a8440f; --wf-4: #ff7a1a; --wf-5: #ffc05a; --wf-6: #fff0d0;
+}
+
+/* Blue LCD: white-on-blue display, like a modern transceiver's screen. */
+:root[data-theme="bluelcd"] {
+  --bg: #06101c; --panel: #0b1828; --panel-2: #081322; --line: #16304d; --line-2: #1f4166;
+  --text: #dcecff; --text-dim: #8fb0d4; --text-faint: #5a7ea6;
+  --amber: #4fc3ff; --amber-dim: #1f6a99; --on-amber: #041022; --on-red: #ffffff;
+  --cyan: #7fe0ff; --green: #5ef0c0; --red: #ff5a6a; --red-deep: #6b1a26;
+  --lcd: #0d3268; --lcd-text: #f0f8ff; --focus: #7fe0ff; --contour: #c4a8ff; --shadow: #000000;
+  --ptt-top: #2a0e16; --ptt-bottom: #1b0910; --ptt-text: #ffa8b4;
+  --scope-bg: #040b16; --scope-grid: #12294a; --scope-grid-2: #0b1c34; --scope-text: #5a7ea6;
+  --trace: #aee8ff; --trace-fill: #3aa8ff; --osc: #5ef0c0;
+  --wf-0: #040b16; --wf-1: #0a2150; --wf-2: #10408f; --wf-3: #1f7ad6; --wf-4: #5ec8ff; --wf-5: #c8f0ff; --wf-6: #ffffff;
+}

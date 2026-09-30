@@ -1,5 +1,6 @@
-/* FTX Deck — console styling. Dark by design (a shack at night); a light
-   palette is available by setting data-theme="light" on <html>. */
+/* FTX Deck — console styling. The default theme ("Shack", dark: a shack at
+   night) is defined here; the others are in themes.css. Canvases draw with
+   the same tokens (js/ui/theme.js), so every colour must be #rrggbb. */
 
 :root {
   --bg: #0a0e13;
@@ -10,8 +11,10 @@
   --text: #dbe4ee;
   --text-dim: #8595a6;
   --text-faint: #56657a;
-  --amber: #f5b83d;
+  --amber: #f5b83d;       /* the accent colour: active controls, dial marker, passband */
   --amber-dim: #9c7427;
+  --on-amber: #1a1204;    /* text on an accent-coloured button */
+  --on-red: #ffffff;      /* text on the red transmit indicators */
   --cyan: #4cc9f0;
   --green: #4ade80;
   --red: #ef4444;
@@ -19,17 +22,19 @@
   --lcd: #0b1a12;
   --lcd-text: #a7f3c9;
   --focus: #4cc9f0;
+  --contour: #a78bfa;
+  --shadow: #000000;
+  /* PTT button (idle) */
+  --ptt-top: #2a1113; --ptt-bottom: #1b0c0d; --ptt-text: #fca5a5;
+  /* spectrum, waterfall, oscilloscope and passband canvases */
+  --scope-bg: #05080b; --scope-grid: #1b2530; --scope-grid-2: #121a22; --scope-text: #56657a;
+  --trace: #8be3ff; --trace-fill: #4cc9f0; --osc: #4ade80;
+  /* waterfall palette, weakest to strongest signal */
+  --wf-0: #04060c; --wf-1: #0a1646; --wf-2: #125aaa; --wf-3: #28c8dc; --wf-4: #f5dc46; --wf-5: #f57828; --wf-6: #fff5eb;
   --radius: 10px;
   --mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
   --sans: 'IBM Plex Sans', system-ui, 'Segoe UI', sans-serif;
   color-scheme: dark;
-}
-
-:root[data-theme="light"] {
-  --bg: #e9edf2; --panel: #ffffff; --panel-2: #f4f6f9; --line: #d5dce5; --line-2: #c3ccd7;
-  --text: #16202b; --text-dim: #536274; --text-faint: #8391a2;
-  --amber: #b7791f; --amber-dim: #d9a54c; --lcd: #e6f4ea; --lcd-text: #14532d;
-  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -62,7 +67,7 @@ button, select, input { font: inherit; color: inherit; }
 }
 .btn:hover { border-color: var(--text-faint); }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
-.btn-primary { background: var(--amber); border-color: var(--amber); color: #1a1204; font-weight: 600; }
+.btn-primary { background: var(--amber); border-color: var(--amber); color: var(--on-amber); font-weight: 600; }
 .btn-primary:hover { filter: brightness(1.08); border-color: var(--amber); }
 .btn-ghost { background: transparent; border-color: transparent; color: var(--text-dim); }
 .btn-ghost:hover { color: var(--text); border-color: var(--line-2); }
@@ -111,7 +116,7 @@ button, select, input { font: inherit; color: inherit; }
 .readout { font: 12px var(--mono); color: var(--text-dim); }
 
 /* ---------- VFOs ---------- */
-.vfos { grid-area: vfos; display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: stretch; padding: 10px; }
+.vfos { grid-area: vfos; display: grid; grid-template-columns: 1fr auto 1fr auto; gap: 12px; align-items: stretch; padding: 10px; }
 .vfo {
   background: var(--lcd); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px;
   cursor: pointer; transition: border-color .15s, opacity .15s; opacity: .62;
@@ -123,7 +128,7 @@ button, select, input { font: inherit; color: inherit; }
 .tag { font: 600 10.5px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line-2); color: var(--text-faint); }
 .tag.on.tag-rx { color: var(--green); border-color: var(--green); }
 .tag.on.tag-tx { color: var(--amber); border-color: var(--amber); }
-.tag.on.tag-tx.live { color: #fff; background: var(--red); border-color: var(--red); }
+.tag.on.tag-tx.live { color: var(--on-red); background: var(--red); border-color: var(--red); }
 .freq {
   font: 500 44px/1.1 var(--mono); color: var(--lcd-text); letter-spacing: .01em;
   margin: 4px 0 2px; white-space: nowrap; user-select: none; font-variant-numeric: tabular-nums;
@@ -136,8 +141,29 @@ button, select, input { font: inherit; color: inherit; }
 .vfo-foot { display: flex; justify-content: space-between; font: 12px var(--mono); color: var(--text-dim); }
 .mode-tag { color: var(--amber); font-weight: 700; }
 .vfo-ops { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-content: center; width: 150px; }
-.step { grid-column: 1 / -1; display: flex; }
-.step select { width: 100%; }
+.step { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
+.step select { flex: 1; min-width: 0; }
+/* Single receive: only the selected VFO is shown, with the buttons beside it. */
+.vfos.single { grid-template-columns: 1fr auto auto; }
+.vfos.single .vfo-ops { order: 1; }
+.vfos.single .dial { order: 2; }
+/* Tuning dial: the ring and shading stay put, the rotor (finger dimple) turns. */
+.dial {
+  width: 96px; aspect-ratio: 1; align-self: center; border-radius: 50%; padding: 6px;
+  background: repeating-conic-gradient(var(--line-2) 0 3deg, var(--panel-2) 3deg 6deg);
+  border: 1px solid var(--line-2); cursor: grab; touch-action: none; user-select: none;
+}
+.dial:active { cursor: grabbing; }
+.dial-knob {
+  width: 100%; height: 100%; border-radius: 50%; border: 1px solid var(--line-2);
+  background: radial-gradient(circle at 35% 28%, var(--line-2), var(--panel-2) 72%);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--shadow) 55%, transparent);
+}
+.dial-rotor { width: 100%; height: 100%; position: relative; }
+.dial-rotor i {
+  position: absolute; left: 39%; top: 8%; width: 22%; height: 22%; border-radius: 50%;
+  background: var(--bg); border: 1px solid var(--line-2); box-shadow: inset 0 1px 3px color-mix(in srgb, var(--shadow) 65%, transparent);
+}
 select { background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 6px; padding: 3px 6px; }
 
 /* ---------- meters ---------- */
@@ -149,23 +175,22 @@ select { background: var(--panel-2); border: 1px solid var(--line-2); border-rad
 .scope-tools { display: flex; gap: 12px; align-items: center; font-size: 12px; color: var(--text-dim); }
 .scope-tools label { display: flex; align-items: center; gap: 6px; }
 .scope-tools input[type=range] { width: 80px; }
-.scope-body { position: relative; flex: 1; min-height: 0; display: grid; grid-template-rows: 32% 1fr; border-radius: 7px; overflow: hidden; border: 1px solid var(--line); background: #05080b; }
+.scope-body { position: relative; flex: 1; min-height: 0; display: grid; grid-template-rows: 32% 1fr; border-radius: 7px; overflow: hidden; border: 1px solid var(--line); background: var(--scope-bg); }
 .scope-body canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
 .scope-hint { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-faint); pointer-events: none; font-size: 13px; }
 .scope-foot { display: flex; gap: 12px; align-items: center; margin-top: 8px; }
-#afScope { width: 220px; height: 44px; border-radius: 6px; background: #05080b; border: 1px solid var(--line); flex: none; }
+#afScope { width: 220px; height: 44px; border-radius: 6px; background: var(--scope-bg); border: 1px solid var(--line); flex: none; }
 .scope-note { font-size: 11.5px; color: var(--text-faint); }
 
 /* ---------- DSP ---------- */
 .dsp { grid-area: dsp; display: flex; flex-direction: column; min-height: 0; overflow: auto; }
-#passband { width: 100%; height: 118px; display: block; border-radius: 7px; background: #05080b; border: 1px solid var(--line); cursor: ew-resize; flex: none; }
+#passband { width: 100%; height: 118px; display: block; border-radius: 7px; background: var(--scope-bg); border: 1px solid var(--line); cursor: ew-resize; flex: none; }
 .rows { display: flex; flex-direction: column; gap: 7px; margin-top: 10px; }
 .row { display: grid; grid-template-columns: 76px 1fr 64px auto; align-items: center; gap: 8px; font-size: 12.5px; }
 .row > label { color: var(--text-dim); }
 .row > .btn { justify-self: start; }
 .row output { font: 12px var(--mono); color: var(--text); text-align: right; }
 .row.toggles { grid-template-columns: repeat(3, auto) 1fr; }
-.row.toggles .seg { justify-self: end; }
 .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 7px; overflow: hidden; }
 .seg button { border: 0; background: var(--panel); padding: 3px 9px; font-size: 12px; cursor: pointer; color: var(--text-dim); border-right: 1px solid var(--line-2); }
 .seg button:last-child { border-right: 0; }
@@ -179,6 +204,9 @@ input[type=range] { width: 100%; accent-color: var(--amber); height: 18px; backg
 .grid-buttons { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
 #modes { grid-template-columns: repeat(4, 1fr); }
 .grid-buttons .btn { padding: 6px 4px; font: 500 12.5px var(--mono); }
+.grid-buttons .btn.no-voice:not(.active) { color: var(--text-faint); }
+.tone-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--text-dim); }
+.tone-row select { min-width: 0; }
 .rxlevels { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
 .rxlevels .row { grid-template-columns: 76px 1fr 64px auto; margin-top: 6px; }
 
@@ -186,23 +214,25 @@ input[type=range] { width: 100%; accent-color: var(--amber); height: 18px; backg
 .tx { grid-area: tx; }
 .ptt {
   width: 100%; height: 58px; border-radius: 9px; border: 1px solid var(--red-deep);
-  background: linear-gradient(180deg, #2a1113, #1b0c0d); color: #fca5a5; cursor: pointer;
+  background: linear-gradient(180deg, var(--ptt-top), var(--ptt-bottom)); color: var(--ptt-text); cursor: pointer;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
   user-select: none; touch-action: none; transition: background .08s;
 }
 .ptt-main { font: 700 18px var(--mono); letter-spacing: .12em; }
 .ptt-sub { font-size: 11px; opacity: .7; }
-.ptt[aria-pressed="true"] { background: var(--red); color: #fff; border-color: #fff3; box-shadow: 0 0 24px #ef444466; }
+.ptt[aria-pressed="true"] { background: var(--red); color: var(--on-red); border-color: var(--text-dim); box-shadow: 0 0 24px color-mix(in srgb, var(--red) 40%, transparent); }
 .ptt:disabled { filter: grayscale(1); opacity: .4; cursor: not-allowed; }
 .tx-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; }
-.tx .row { grid-template-columns: 58px 1fr 52px; }
+.tx-auto { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--text-dim); }
+.tx-auto label { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.tx .row { grid-template-columns: 70px 1fr 52px; }
 .levelbar { grid-column: 2 / span 2; height: 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
 .levelbar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--green) 0 70%, var(--amber) 70% 90%, var(--red) 90%); transition: width .06s linear; }
 #btnTune.active { color: var(--amber); border-color: var(--amber); }
 
 /* ---------- dialogs ---------- */
 .dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line-2); border-radius: 12px; padding: 18px 20px; width: 520px; max-width: calc(100vw - 32px); }
-.dialog::backdrop { background: #000a; }
+.dialog::backdrop { background: color-mix(in srgb, var(--shadow) 65%, transparent); }
 .dialog-wide { width: 820px; }
 .dialog-small { width: 360px; }
 .dialog h2 { margin: 0 0 12px; font-size: 16px; }
@@ -221,6 +251,11 @@ input[type=range] { width: 100%; accent-color: var(--amber); height: 18px; backg
   .freq { font-size: 36px; }
   .bandmode { grid-template-columns: 1fr; gap: 10px; }
   #modes, .grid-buttons { grid-template-columns: repeat(7, 1fr); }
+}
+/* Two VFOs and the dial don't fit side by side on a narrow window. */
+@media (max-width: 1240px) {
+  .vfos:not(.single) { grid-template-columns: 1fr auto 1fr; }
+  .vfos:not(.single) .dial { display: none; }
 }
 @media (max-height: 820px) {
   .freq { font-size: 34px; }

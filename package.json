@@ -4,9 +4,17 @@
   "description": "Browser control console for the Yaesu FTX-1: CAT control, USB audio, audio waterfall and meters.",
   "type": "module",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "start": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
+    "screenshots": "node scripts/build.mjs && node scripts/screenshots.mjs",
     "test": "node --test test/*.test.mjs"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
 }

@@ -49,7 +49,7 @@ FTX Deck calls MAIN "VFO A" and SUB "VFO B" in the UI.
 | Preamp | `PA0n;` (HF/50) | 0 IPO, 1 AMP1, 2 AMP2. `PA1n;`/`PA2n;` for 144/430, 0/1 |
 | Attenuator | `RA0n;` | 0 off, 1 on (12 dB) |
 | Width | `SH00nn;` | code 00–23 (00 = default), table below |
-| IF shift | `IS0` + on + sign + `nnnn` e.g. `IS01+0200;` | ±1200 Hz |
+| IF shift | `IS00` + sign + `nnnn` e.g. `IS00+0200;` | ±1200 Hz, 20 Hz steps. P2 is fixed at `0` (Yaesu's manual; its own example is `IS00+1000;`). Hamlib sends P2 = `1` for "shift on", which the radio didn't act on |
 | Noise blanker | `NL0nnn;` | 000 = off, 001–010 |
 | DNR | `RL0nn;` | 00 = off, 01–10 |
 | DNF (auto notch) | `BC0n;` | 0/1 |
@@ -59,6 +59,18 @@ FTX Deck calls MAIN "VFO A" and SUB "VFO B" in the UI.
 | Contour freq | `CO01nnnn;` | 0010–3200 Hz |
 | APF on/off | `CO02nnnn;` | CW only |
 | Narrow | `NA0n;` | 0/1 |
+| Squelch type | `CT0n;` | 0 OFF, 1 ENC, 2 TSQ, 3 DCS, 4 PR FREQ, 5 REV TONE. The IF/OI answer lists ENC and TSQ the other way round; **verify** |
+| CTCSS tone | `CN00nnn;` | 000–049, 67.0–254.1 Hz (standard 50-tone table) |
+| DCS code | `CN01nnn;` | 000–103, codes 023–754 |
+
+Squelch state: `RI0;` → `RI` + eight digits P1–P8, P8 `1` = squelch open (BUSY),
+`0` = closed. Seen on hardware on 2 m FM with MAIN selected: `RI00000000;`
+squelched, `RI00000001;` with the squelch opened. `RI1;` gets no answer.
+
+The USB receive audio is not muted by the radio's squelch. FTX Deck tried
+silencing the PC speakers from P8, but on 20 m USB it stayed muted with a
+signal plainly present, so P8 isn't a usable "audio is present" signal outside
+FM. FTX Deck no longer uses `RI`; the PC always plays the USB audio.
 
 The `NB0x`/`NR0x` on/off commands used on other Yaesu rigs answer `?;` on the FTX-1;
 on/off is done with the level commands above.
@@ -86,17 +98,72 @@ on/off is done with the level commands above.
 | VOX | `VXn;` | 0/1 |
 | VOX gain | `VGnnn;` | 000–100 |
 | Monitor level | `ML0nnn;` | 000–100 |
-| Tuner | `AC003;` start tune (internal), `AC000;` stop. `AC;` → P3 ≠ 0 while tuning | ATAS uses `AC123;`/`AC120;`. Internal tuner needs Optima/SPA-1 |
+| Tuner | `AC` P1 P2 P3, see below. `AC;` → P3 ≠ 0 while tuning | Internal tuner needs Optima/SPA-1 |
 | Key speed | `KSnnn;` | 004–060 wpm |
 | Key pitch | `KPnn;` | 00–75 → 300–1050 Hz in 10 Hz steps |
 
+### Antenna tuner (AC)
+
+`AC` P1 P2 P3: P1 `0` internal / `1` external port, P2 `0` tuner / `2` ATAS,
+P3 `0` stop, `3` start (ATAS also `1` up, `2` down).
+
+The tuner in use is whatever the radio menu has selected; TUNE only starts a
+cycle on it. FTX Deck reads the selection first:
+
+- `EX030704;` → HF antenna in use, `0` ANT1, `1` ANT2.
+- `EX030701;` / `EX030702;` → TUNER TYPE SEL for ANT1 / ANT2:
+  `0` INT, `1` INT (FAST), `2` EXT, `3` ATAS.
+
+It then sends the start forms in this order until one isn't answered `?;`:
+
+| Tuner type | Start | Stop |
+|---|---|---|
+| INT, INT (FAST) | `AC003;` then `AC103;` | `AC000;` then `AC100;` |
+| EXT | `AC103;` then `AC003;` | `AC000;` then `AC100;` |
+| ATAS | `AC123;` | `AC120;` |
+| menu unreadable | `AC103;`, `AC003;`, `AC123;` | `AC000;`, `AC100;`, `AC120;` |
+
+`AC;` can't be used on its own to tell when a tune has finished: on a real radio
+the app went on seeing P3 ≠ 0 long after the tune was done (presumably `1`,
+tuner on; **verify**). FTX Deck ends its TUNING state when `AC;` reads P3 = 0, or
+when the tuning carrier has come and gone on the PO meter (`RM5;`), or when no
+carrier appears within 3 s.
+
+Yaesu's manual gives `AC003;` for the internal tuner. Hamlib's hardware testing
+found `AC103;` starts a cycle for INT and EXT alike, and that an ATAS rejects
+`AC000;` and needs the `AC12x` forms. An external tuner also needs menu
+TUN/LIN PORT SELECT (`EX030103`) set to EXT-TUNER. **verify** INT and EXT on a
+real radio.
+
+### Power limits
+
+From Yaesu's specifications; FTX Deck sets the power slider's range from these:
+
+| Configuration | SSB/CW/FM/DATA | AM carrier |
+|---|---|---|
+| Optima/SPA-1, HF and 50 MHz | 5–100 W | 5–25 W |
+| Optima/SPA-1, 70 MHz and up | 5–50 W | 5–13 W |
+| Field head, 13.8 V | 0.5–10 W | 0.5–2.5 W |
+| Field head, battery | 0.5–6 W | 0.5–1.5 W |
+
+`PC;` is polled, so a change of head (P1) is picked up while connected. CAT has
+no read for the power source: a Field head that answers `?;` to more than 6 W is
+taken to be on its battery until the next connect. If `PC;` reports more than
+the table allows, the radio's figure wins. **verify** that the radio refuses
+out-of-range `PC` sets and limits `PC` in AM.
+
 ## Meters
 
-- `SM0;` → `SM0nnn;` raw 0–255. Hamlib's calibration: 0=S0, 12=S1, 27=S2,
-  40=S3, 55=S4, 65=S5, 80=S6, 95=S7, 112=S8, 130=S9, 150=+10, 172=+20,
-  190=+30, 220=+40, 240=+50, 255=+60 dB.
-- `RMn;` → `RMnvvv…;` raw 0–255 in the first three digits after n.
+- `RMn;` → `RMnvvv000;` raw 0–255 in the first three digits after n.
   n: 1 MAIN S, 2 SUB S, 3 COMP, 4 ALC, 5 PO, 6 SWR, 7 ID, 8 VDD.
+  `RM0;` → `RM0mmmsss;` gives the MAIN and SUB S readings together.
+- FTX Deck reads the S meter with `RM1;` / `RM2;`. `SM0;` → `SM0nnn;` works
+  for MAIN, but on a real radio `SM1;` gets no usable answer, so SUB can't be
+  read with `SM`. Seen on hardware with SUB selected in single receive:
+  `SM0;` → `SM0000;`, `SM1;` → nothing, `RM1;` → `RM1000000;`, `RM2;` → `RM2109000;`.
+- S calibration (Hamlib's, for `SM`; assumed the same for `RM1`/`RM2`, **verify**):
+  0=S0, 12=S1, 27=S2, 40=S3, 55=S4, 65=S5, 80=S6, 95=S7, 112=S8, 130=S9,
+  150=+10, 172=+20, 190=+30, 220=+40, 240=+50, 255=+60 dB.
 - PO (approx., **verify** on Optima): 0→0 W, 10→0.8, 50→8, 100→26, 150→54, 200→92, 250→140.
 - SWR (Yaesu default curve, **verify**): 12→1.0, 39→1.35, 65→1.5, 89→2.0, 242→5.0.
 - ALC: 0–64 is the normal zone.
