@@ -102,9 +102,12 @@ needs no server and no internet connection.
 
 ## Connecting the radio
 
-1. Install the Silicon Labs CP210x driver from Yaesu's FTX-1 downloads page, if
-   Windows hasn't already. The radio then shows two COM ports and a
-   "USB Audio CODEC" sound device.
+1. Install the radio's USB driver (Silicon Labs CP210x), if Windows hasn't
+   already: [CP210x_Universal_Windows_Driver.zip](https://www.yaesu.com/Files/BB2B47AE-1018-01AF-FAE48FDCB1919193/CP210x_Universal_Windows_Driver.zip)
+   from [Yaesu's FTX-1 downloads](https://www.yaesu.com/product-detail.aspx?Model=FTX-1+Series&CatName=HF+Transceivers%2FAmplifiers).
+   Unzip it, right-click `silabser.inf` and choose **Install**. The radio then
+   shows two COM ports and a "USB Audio CODEC" sound device. The
+   [user manual](docs/USER-MANUAL.md#requirements) has more detail.
 2. On the radio, the CAT rate defaults to 38400. If you've changed it, match it in
    **Settings**.
 3. Click **Connect radio** and pick the **Enhanced COM** port. Don't pick the

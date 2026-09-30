@@ -9,6 +9,7 @@ screen, one area at a time. For installing and running FTX Deck, see the
 
 **Contents**
 
+- [Requirements](#requirements)
 - [Before you start](#before-you-start)
 - [Top bar](#top-bar)
 - [VFOs](#vfos)
@@ -23,6 +24,43 @@ screen, one area at a time. For installing and running FTX Deck, see the
 - [Keyboard and mouse shortcuts](#keyboard-and-mouse-shortcuts)
 - [How FTX Deck stays in step with the radio](#how-ftx-deck-stays-in-step-with-the-radio)
 - [Known limitations](#known-limitations)
+
+---
+
+## Requirements
+
+- **A Yaesu FTX-1** (Field head, or Optima), connected to the PC with a USB
+  cable from the radio's **side-panel USB jack**.
+- **Chrome or Edge** on a desktop or laptop (Windows, macOS or Linux). Other
+  browsers can't reach USB serial ports.
+- **The radio's USB driver (Silicon Labs CP210x virtual COM port driver).**
+  Without it the radio's COM ports don't appear and FTX Deck can't connect.
+
+### Installing the USB driver (Windows 10 and 11)
+
+1. Download **FTX-1 series USB Driver Virtual COM Port Driver (Windows 11/10)**
+   from the Downloads section of [Yaesu's FTX-1 page](https://www.yaesu.com/product-detail.aspx?Model=FTX-1+Series&CatName=HF+Transceivers%2FAmplifiers),
+   or directly: [CP210x_Universal_Windows_Driver.zip](https://www.yaesu.com/Files/BB2B47AE-1018-01AF-FAE48FDCB1919193/CP210x_Universal_Windows_Driver.zip).
+2. Unzip it, right-click **silabser.inf** in the unzipped folder, and choose
+   **Install**.
+3. Connect the radio and switch it on. In **Device Manager → Ports (COM & LPT)**
+   you should now see two entries:
+   - **Silicon Labs Dual CP210x USB to UART Bridge: Enhanced COM Port**, the one
+     FTX Deck uses;
+   - **Silicon Labs Dual CP210x USB to UART Bridge: Standard COM Port**.
+
+Yaesu's [Virtual COM Port Driver Installation Manual](https://www.yaesu.com/Files/BB2B47AE-1018-01AF-FAE48FDCB1919193/USB_Driver_Installation_Manual_ENG_2205-E.pdf)
+(PDF) goes through the same steps with pictures.
+
+**macOS and Linux:** Linux includes the CP210x driver, so the ports appear
+without installing anything. On macOS, if the radio's ports don't appear, install
+the driver from [Silicon Labs' CP210x driver page](https://www.silabs.com/software-and-tools/usb-to-uart-bridge-vcp-drivers?tab=downloads).
+
+**Audio needs no driver.** The radio's sound device, **USB Audio CODEC**, uses
+the operating system's built-in USB audio support. Look for it under
+**Sound, video and game controllers** in Device Manager.
+
+For how to start FTX Deck itself, see the [README](../README.md#running-it).
 
 ---
 
