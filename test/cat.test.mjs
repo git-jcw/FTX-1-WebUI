@@ -417,3 +417,31 @@ test('TX watchdog unkeys', async () => {
   assert.match(radio.state.warning, /timeout/i);
   await radio.disconnect();
 });
+
+test('the radio audio devices are never Chrome\'s "Default" or "Communications" entries', async () => {
+  const devices = [
+    { kind: 'audioinput', deviceId: 'default', label: 'Default - Microphone (USB Audio CODEC)' },
+    { kind: 'audioinput', deviceId: 'communications', label: 'Communications - Microphone (USB Audio CODEC)' },
+    { kind: 'audioinput', deviceId: 'pcmic', label: 'Microphone (Realtek Audio)' },
+    { kind: 'audioinput', deviceId: 'codec-in', label: 'Microphone (USB Audio CODEC)' },
+    { kind: 'audiooutput', deviceId: 'default', label: 'Default - Speakers (USB Audio CODEC)' },
+    { kind: 'audiooutput', deviceId: 'communications', label: 'Communications - Speakers (USB Audio CODEC)' },
+    { kind: 'audiooutput', deviceId: 'speakers', label: 'Speakers (Realtek Audio)' },
+    { kind: 'audiooutput', deviceId: 'codec-out', label: 'Speakers (USB Audio CODEC)' },
+  ];
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { mediaDevices: { enumerateDevices: async () => devices } } });
+  try {
+    const { AudioEngine } = await import('../js/audio/audio-engine.js');
+    const a = new AudioEngine();
+    Object.assign(a.state, { radioIn: '', radioOut: '', speakers: '', mic: '' });
+    await a.refreshDevices();
+    assert.deepEqual([a.state.radioIn, a.state.radioOut], ['codec-in', 'codec-out'], 'auto-pick finds the real radio device');
+    Object.assign(a.state, { radioIn: 'default', radioOut: 'communications' });
+    await a.refreshDevices();
+    assert.deepEqual([a.state.radioIn, a.state.radioOut], ['codec-in', 'codec-out'], 'a saved virtual entry is replaced by the real device');
+    assert.deepEqual([a.state.speakers, a.state.mic], ['speakers', 'pcmic'], 'the PC speakers and mic are never the radio, even via "Default"');
+  } finally {
+    if (saved) Object.defineProperty(globalThis, 'navigator', saved); else delete globalThis.navigator;
+  }
+});

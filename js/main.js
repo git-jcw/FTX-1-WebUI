@@ -5,7 +5,7 @@ import { WebSerialTransport } from './cat/transport.js';
 import { MockRadioTransport } from './cat/mock-radio.js';
 import { BANDS, bandForFreq, bandDefault, widthTable, AGC_NAMES, PREAMP_NAMES_HF, preampBandType,
   SQL_TYPE, CTCSS_TONES, DCS_CODES } from './cat/ftx1.js';
-import { AudioEngine } from './audio/audio-engine.js';
+import { AudioEngine, isVirtualDevice } from './audio/audio-engine.js';
 import { ArcMeter } from './ui/meters.js';
 import { SpectrumWaterfall, Oscilloscope, PassbandView } from './ui/scope.js';
 import { renderFreq, parseFreqInput, formatFreqShort } from './ui/vfo.js';
@@ -350,8 +350,11 @@ function fillSelect(sel, list, value) {
 }
 function fillAudioSelects() {
   const a = audio.state;
-  fillSelect($('setRadioIn'), a.inputs, a.radioIn);
-  fillSelect($('setRadioOut'), a.outputs, a.radioOut);
+  // The radio lists leave out Chrome's "Default" / "Communications" entries: they
+  // follow Windows' current default, which may not be the radio tomorrow.
+  const real = list => list.filter(d => !isVirtualDevice(d.id));
+  fillSelect($('setRadioIn'), real(a.inputs), a.radioIn);
+  fillSelect($('setRadioOut'), real(a.outputs), a.radioOut);
   fillSelect($('setSpeakers'), a.outputs, a.speakers);
   fillSelect($('setMic'), a.inputs, a.mic);
 }

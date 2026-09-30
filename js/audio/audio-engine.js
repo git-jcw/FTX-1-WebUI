@@ -10,6 +10,8 @@
 
 const RADIO_LABEL = /usb audio codec|ftx|yaesu|burr-brown|pcm29/i;
 const MIC_OFF_DELAY_MS = 80; // lets the TX gate finish closing before the mic is muted
+// Chrome's entries that stand for "the operating system's current default".
+export const isVirtualDevice = id => id === 'default' || id === 'communications';
 
 export class AudioEngine extends EventTarget {
   constructor() {
@@ -85,8 +87,11 @@ export class AudioEngine extends EventTarget {
     const inputs = all.filter(d => d.kind === 'audioinput').map(d => ({ id: d.deviceId, label: d.label || 'Input' }));
     const outputs = all.filter(d => d.kind === 'audiooutput').map(d => ({ id: d.deviceId, label: d.label || 'Output' }));
     const pick = (list, cur, radio) => {
-      if (cur && list.some(d => d.id === cur)) return cur;
-      const r = list.find(d => RADIO_LABEL.test(d.label));
+      // The radio must be the device itself, never Chrome's "Default" or
+      // "Communications" entry: those follow whatever Windows' default is at the
+      // moment, even when their label still names the radio.
+      if (cur && list.some(d => d.id === cur) && !(radio && isVirtualDevice(cur))) return cur;
+      const r = list.find(d => !isVirtualDevice(d.id) && RADIO_LABEL.test(d.label));
       if (radio) return r?.id || '';
       const nonRadio = list.find(d => !RADIO_LABEL.test(d.label) && d.id !== 'communications');
       return nonRadio?.id || list[0]?.id || '';
