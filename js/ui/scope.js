@@ -30,17 +30,33 @@ export function clickTuneTarget(m, f) {
   else if (/^(DATA|PSK)/.test(m.mode)) want = 1500;
   return m.dial + sb * (f - want);
 }
-// Approximate audio passband edges (Hz) for drawing.
+// SSB receive passband measured on an FTX-1 (audio Hz above the dial, i.e.
+// where the band noise starts and stops) for a few filter widths, shift 0.
+const SSB_PASSBAND = [[1800, 500, 2500], [2400, 300, 2700], [2700, 100, 3000], [3000, 50, 3100]];
+export function ssbPassband(bw) {
+  const pts = SSB_PASSBAND, first = pts[0], last = pts[pts.length - 1];
+  if (bw <= first[0]) { const half = (first[2] - first[1]) / 2 * bw / first[0]; return { lo: 1500 - half, hi: 1500 + half }; }
+  if (bw >= last[0]) return { lo: last[1], hi: last[2] + (bw - last[0]) };
+  const i = pts.findIndex(p => p[0] >= bw), [w0, lo0, hi0] = pts[i - 1], [w1, lo1, hi1] = pts[i];
+  const u = (bw - w0) / (w1 - w0);
+  return { lo: lo0 + (lo1 - lo0) * u, hi: hi0 + (hi1 - hi0) * u };
+}
+
+// Audio passband edges (Hz) for drawing.
 export function passbandEdges(m) {
   const table = widthTable(m.mode);
-  let bw = table ? (table[m.width] || (/^(LSB|USB)$/.test(m.mode) ? 2400 : 500)) : (/^AM/.test(m.mode) ? 6000 : 3000);
+  const bw = table ? (table[m.width] || (/^(LSB|USB)$/.test(m.mode) ? 2400 : 500)) : (/^AM/.test(m.mode) ? 6000 : 3000);
+  const shift = m.shift || 0;
+  if (/^(LSB|USB)$/.test(m.mode)) {
+    const { lo, hi } = ssbPassband(bw);
+    return { lo: Math.max(0, lo + shift), hi: hi + shift, bw };
+  }
   let center;
   if (/^CW/.test(m.mode)) center = m.pitch;
-  else if (/^(LSB|USB)$/.test(m.mode)) center = 300 + bw / 2;
   else if (/^(DATA|PSK)/.test(m.mode)) center = 1500;
   else if (/^RTTY/.test(m.mode)) center = 2210;
   else { return { lo: 100, hi: Math.min(bw / 2, 6000), bw }; }
-  center += m.shift || 0;
+  center += shift;
   return { lo: Math.max(0, center - bw / 2), hi: center + bw / 2, bw };
 }
 
@@ -332,9 +348,10 @@ export class PassbandView {
 
     // passband trapezoid
     const pb = passbandEdges(m);
-    const lo = xOf(pb.lo), hi = xOf(pb.hi), skirt = 10 * d;
+    // the bottom corners sit on the passband edges; the sides slope in from there
+    const lo = xOf(pb.lo), hi = xOf(pb.hi), skirt = Math.min(8 * d, (hi - lo) / 4);
     c.beginPath();
-    c.moveTo(lo - skirt, base); c.lineTo(lo + skirt * 0.4, top); c.lineTo(hi - skirt * 0.4, top); c.lineTo(hi + skirt, base);
+    c.moveTo(lo, base); c.lineTo(lo + skirt, top); c.lineTo(hi - skirt, top); c.lineTo(hi, base);
     c.closePath();
     c.fillStyle = alpha(k.accent, 0.14); c.fill();
     c.strokeStyle = k.accent; c.lineWidth = 1.6 * d; c.stroke();

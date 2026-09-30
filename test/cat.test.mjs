@@ -1,7 +1,7 @@
 // Run with: node --test test/
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cmd, parse, calibrate, splitReplies, replyKey, widthTable, bandForFreq, bandDefault, BANDS,
+import { cmd, parse, calibrate, splitReplies, replyKey, widthTable, bandForFreq, bandDefault, BANDS, SSB_WIDTHS,
   MENU, TUNER, tuneCommands, powerLimits, SQL_TYPE, CTCSS_TONES, DCS_CODES, modSourceMenu } from '../js/cat/ftx1.js';
 import { MockRadioTransport } from '../js/cat/mock-radio.js';
 import { CatLink } from '../js/cat/cat-link.js';
@@ -459,4 +459,18 @@ test('MOD SOURCE can be read for the transmit mode', async () => {
   await radio.setMode(0, 'DATA-U');
   assert.deepEqual(await radio.readModSource(), { group: 'DATA', source: 'AUTO' });
   await radio.disconnect();
+});
+
+test('the SSB passband drawing matches the widths measured on the radio', async () => {
+  const { passbandEdges, ssbPassband } = await import('../js/ui/scope.js');
+  const at = (hz, shift = 0) => passbandEdges({ mode: 'USB', width: SSB_WIDTHS.indexOf(hz), shift });
+  assert.deepEqual(at(3000), { lo: 50, hi: 3100, bw: 3000 });
+  assert.deepEqual(at(2700), { lo: 100, hi: 3000, bw: 2700 });
+  assert.deepEqual(at(2400), { lo: 300, hi: 2700, bw: 2400 });
+  assert.deepEqual(at(1800), { lo: 500, hi: 2500, bw: 1800 });
+  assert.deepEqual(ssbPassband(2100), { lo: 400, hi: 2600 }, 'between measurements: interpolated');
+  const narrow = ssbPassband(600);
+  assert.equal((narrow.lo + narrow.hi) / 2, 1500, 'narrow filters centre on 1500 Hz');
+  assert.deepEqual(at(2400, 200), { lo: 500, hi: 2900, bw: 2400 }, 'IF shift moves both edges');
+  assert.deepEqual(passbandEdges({ mode: 'LSB', width: SSB_WIDTHS.indexOf(2700), shift: 0 }), { lo: 100, hi: 3000, bw: 2700 });
 });
