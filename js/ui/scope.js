@@ -272,11 +272,17 @@ export class Oscilloscope {
   }
 }
 
+// The analyser reports -Infinity for a bin with no energy at all, as happens
+// whenever the radio's USB audio goes fully silent (transmitting, changing
+// band). Averaging that in turns the average into NaN for good, so clamp it.
+const SILENT_DB = -200;
+export const audibleDb = v => (v > SILENT_DB ? v : SILENT_DB); // also maps NaN to SILENT_DB
+
 // ---------- passband graphic ----------
 export class PassbandView {
   constructor(canvas, model, { onShift, onWidthStep } = {}) {
     this.cv = canvas; this.model = model; this.onShift = onShift; this.onWidthStep = onWidthStep;
-    this.span = 4000; this.bins = null; this.avg = null;
+    this.span = 4000; this.floor = -112; this.range = 62; this.bins = null; this.avg = null;
     let drag = null;
     canvas.addEventListener('pointerdown', e => {
       canvas.setPointerCapture(e.pointerId);
@@ -302,22 +308,26 @@ export class PassbandView {
     const xOf = f => f / this.span * W;
     const base = H - 16 * d, top = 14 * d;
 
-    // live audio spectrum, faint
+    // live audio spectrum, faint, on the same Floor / Range scale as the main spectrum
     const an = m.analyser;
     if (an) {
       if (!this.bins || this.bins.length !== an.frequencyBinCount) this.bins = new Float32Array(an.frequencyBinCount);
       an.getFloatFrequencyData(this.bins);
       const binHz = m.sampleRate / an.fftSize;
-      if (!this.avg || this.avg.length !== W) this.avg = new Float32Array(W).fill(-140);
-      c.beginPath(); c.moveTo(0, base);
+      if (!this.avg || this.avg.length !== W) this.avg = new Float32Array(W).fill(SILENT_DB);
+      const ys = new Float32Array(W);
       for (let x = 0; x < W; x++) {
         const b = Math.min(this.bins.length - 1, Math.round(x / W * this.span / binHz));
-        this.avg[x] += (this.bins[b] - this.avg[x]) * 0.3;
-        const v = Math.max(0, Math.min(1, (this.avg[x] + 115) / 65));
-        c.lineTo(x, base - v * (base - top));
+        this.avg[x] += (audibleDb(this.bins[b]) - this.avg[x]) * 0.3;
+        ys[x] = base - Math.max(0, Math.min(1, (this.avg[x] - this.floor) / this.range)) * (base - top);
       }
+      c.beginPath(); c.moveTo(0, base);
+      for (let x = 0; x < W; x++) c.lineTo(x, ys[x]);
       c.lineTo(W, base); c.closePath();
       c.fillStyle = alpha(k.traceFill, 0.16); c.fill();
+      c.beginPath();
+      for (let x = 0; x < W; x++) (x ? c.lineTo : c.moveTo).call(c, x, ys[x]);
+      c.strokeStyle = alpha(k.trace, 0.45); c.lineWidth = 1 * d; c.stroke();
     }
 
     // passband trapezoid

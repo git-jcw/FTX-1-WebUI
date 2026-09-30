@@ -151,9 +151,10 @@ export const cmd = {
   preamp: (bandType, n) => `PA${clamp(bandType, 0, 2)}${clamp(n, 0, 2)};`,
   att: on => `RA0${on ? 1 : 0};`,
   width: (v, code) => `SH${vfo(v)}0${pad(clamp(code, 0, 23), 2)};`,
+  // IS P1 P2 P3 P4: P2 is fixed at 0 (Yaesu's manual; Hamlib's "on/off" 1 is refused).
   ifShift: (v, hz) => {
     const h = clamp(Math.round(hz / 20) * 20, -1200, 1200);
-    return `IS${vfo(v)}${h === 0 ? 0 : 1}${h < 0 ? '-' : '+'}${pad(Math.abs(h), 4)};`;
+    return `IS${vfo(v)}0${h < 0 ? '-' : '+'}${pad(Math.abs(h), 4)};`;
   },
   nbLevel: (v, n) => `NL${vfo(v)}${pad(clamp(n, 0, 10), 3)};`,
   nrLevel: (v, n) => `RL${vfo(v)}${pad(clamp(n, 0, 10), 2)};`,
@@ -208,9 +209,9 @@ export const parse = {
   ifShift: r => {
     const b = body(r, 'IS');
     if (!b || b.length < 7) return null;
-    const on = b[1] === '1'; const mag = int(b.slice(3, 7));
+    const mag = int(b.slice(3, 7));
     if (mag == null) return null;
-    return on ? (b[2] === '-' ? -mag : mag) : 0;
+    return b[2] === '-' ? -mag : mag;
   },
   // BP/CO replies: P1 VFO, P2 sub-function, then value.
   sub: (r, op) => { const b = body(r, op); return b && b.length >= 3 ? { fn: b[1], value: int(b.slice(2)) } : null; },

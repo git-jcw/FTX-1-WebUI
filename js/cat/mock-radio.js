@@ -71,9 +71,9 @@ export class MockRadioTransport {
       case 'PA': { const b = +a[0] || 0; if (a.length === 2) { s.PA[b] = +a[1]; return null; } return `PA${b}${s.PA[b]};`; }
       case 'RA': if (a.length === 2) { s.RA = +a[1]; return null; } return `RA0${s.RA};`;
       case 'SH': if (a.length === 4) { s.SH[v] = +a.slice(2); return null; } return `SH${v}0${p2(s.SH[v])};`;
-      case 'IS':
-        if (a.length === 7) { s.IS[v] = a[1] === '1' ? (a[2] === '-' ? -1 : 1) * +a.slice(3) : 0; return null; }
-        return `IS${v}${s.IS[v] ? 1 : 0}${s.IS[v] < 0 ? '-' : '+'}${p4(Math.abs(s.IS[v]))};`;
+      case 'IS': // IS P1 P2 P3 P4: P2 is fixed at 0, and anything else is refused
+        if (a.length === 7) { if (a[1] !== '0') return '?;'; s.IS[v] = (a[2] === '-' ? -1 : 1) * +a.slice(3); return null; }
+        return `IS${v}0${s.IS[v] < 0 ? '-' : '+'}${p4(Math.abs(s.IS[v]))};`;
       case 'NL': if (a.length === 4) { s.NL[v] = +a.slice(1); return null; } return `NL${v}${p3(s.NL[v])};`;
       case 'RL': if (a.length === 3) { s.RL[v] = +a.slice(1); return null; } return `RL${v}${p2(s.RL[v])};`;
       case 'BC': if (a.length === 2) { s.BC[v] = +a[1]; return null; } return `BC${v}${s.BC[v]};`;

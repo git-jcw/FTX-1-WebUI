@@ -6,7 +6,7 @@ import { cmd, parse, calibrate, splitReplies, replyKey, widthTable, bandForFreq,
 import { MockRadioTransport } from '../js/cat/mock-radio.js';
 import { CatLink } from '../js/cat/cat-link.js';
 import { RadioService } from '../js/radio.js';
-import { SpectrumWaterfall } from '../js/ui/scope.js';
+import { SpectrumWaterfall, audibleDb } from '../js/ui/scope.js';
 import { TuningDial, STEPS_PER_REV } from '../js/ui/dial.js';
 
 test('command builders match the FTX-1 formats', () => {
@@ -17,9 +17,10 @@ test('command builders match the FTX-1 formats', () => {
   assert.equal(cmd.mode(0, 'CW-U'), 'MD03;');
   assert.equal(cmd.afGain(0, 128), 'AG0128;');
   assert.equal(cmd.width(0, 17), 'SH0017;');
-  assert.equal(cmd.ifShift(0, 200), 'IS01+0200;');
-  assert.equal(cmd.ifShift(0, -440), 'IS01-0440;');
+  assert.equal(cmd.ifShift(0, 200), 'IS00+0200;');
+  assert.equal(cmd.ifShift(0, -440), 'IS00-0440;');
   assert.equal(cmd.ifShift(0, 0), 'IS00+0000;');
+  assert.equal(cmd.ifShift(1, 1500), 'IS10+1200;');
   assert.equal(cmd.nbLevel(0, 5), 'NL0005;');
   assert.equal(cmd.nrLevel(0, 7), 'RL007;');
   assert.equal(cmd.notch(0, true), 'BP00001;');
@@ -55,7 +56,8 @@ test('reply parsers', () => {
   assert.equal(parse.mode('MD0C;'), 'DATA-U');
   assert.equal(parse.vfoLevel('AG0128;', 'AG'), 128);
   assert.equal(parse.width('SH0017;'), 17);
-  assert.equal(parse.ifShift('IS01-0440;'), -440);
+  assert.equal(parse.ifShift('IS00-0440;'), -440);
+  assert.equal(parse.ifShift('IS00+0200;'), 200, 'P2 is always 0, so it says nothing about whether shift is in use');
   assert.equal(parse.ifShift('IS00+0000;'), 0);
   assert.equal(parse.smeter('SM0130;'), 130);
   assert.deepEqual(parse.meter('RM5123000;'), { meter: 5, raw: 123 });
@@ -200,6 +202,16 @@ test('the waterfall is centred on the dial frequency', () => {
   assert.equal(sw._tuneTargetAtX(0.75, m), 14252000);
   assert.equal(sw._tuneTargetAtX(0.25, { ...m, mode: 'FM' }), 14248000, 'AM/FM tune to the clicked frequency');
   assert.equal(sw._tuneTargetAtX(0.5, { ...m, mode: 'DATA-U' }), 14248500, 'DATA puts the clicked signal at 1500 Hz');
+});
+
+test('a moment of digital silence does not break the RX DSP spectrum for good', () => {
+  // the same running average the passband graphic keeps per pixel
+  const run = (readings, clamp) => readings.reduce((avg, v) => avg + ((clamp ? audibleDb(v) : v) - avg) * 0.3, -200);
+  const silenceThenAudio = [-90, -Infinity, -Infinity, -85, -80, -80, -80, -80, -80, -80, -80, -80];
+  assert.ok(Number.isNaN(run(silenceThenAudio, false)), 'unclamped: the average becomes NaN and stays there');
+  const avg = run(silenceThenAudio, true);
+  assert.ok(Number.isFinite(avg) && avg > -90, `clamped: it recovers once audio returns (${avg.toFixed(1)} dB)`);
+  assert.equal(audibleDb(NaN), -200);
 });
 
 test('the tuning dial pays out steps as it turns', () => {

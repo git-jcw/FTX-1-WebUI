@@ -11,6 +11,8 @@ No install and no drivers beyond the radio's own USB driver. Nothing leaves your
 
 ![FTX Deck in demo mode, default theme](docs/screenshots/shack.png)
 
+The [user manual](docs/USER-MANUAL.md) explains every button and setting.
+
 ## What it does
 
 - **VFO A (MAIN) and VFO B (SUB):** scroll over any digit to tune by that digit, or
@@ -138,6 +140,7 @@ js/cat/transport.js     Web Serial transport
 js/cat/mock-radio.js    simulated FTX-1 used by demo mode and tests
 js/audio/audio-engine.js USB audio in/out, analyser, demo band
 js/ui/                  VFO, meters, dial, spectrum/waterfall, passband views, themes
+docs/USER-MANUAL.md     user manual: every control explained
 docs/FTX1-CAT-NOTES.md  protocol reference used by this project
 test/                   Node tests (npm test)
 scripts/serve.mjs       zero-dependency local web server

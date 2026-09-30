@@ -415,13 +415,14 @@ const passband = new PassbandView($('passband'), model, {
 });
 if (![...$('selSpan').options].some(o => +o.value === settings.span)) settings.span = 8000; // span from an older layout
 Object.assign(scope, { span: settings.span, floor: settings.floor, range: settings.range, speed: settings.speed });
+Object.assign(passband, { floor: settings.floor, range: settings.range }); // the RX DSP graphic shares Floor / Range
 $('selSpan').value = String(settings.span);
 $('rngFloor').value = String(settings.floor);
 $('rngRange').value = String(settings.range);
 $('selSpeed').value = String(settings.speed);
 $('selSpan').onchange = e => { scope.span = settings.span = +e.target.value; scope.clear(); saveSettings(); };
-$('rngFloor').oninput = e => { scope.floor = settings.floor = +e.target.value; saveSettings(); };
-$('rngRange').oninput = e => { scope.range = settings.range = +e.target.value; saveSettings(); };
+$('rngFloor').oninput = e => { scope.floor = passband.floor = settings.floor = +e.target.value; saveSettings(); };
+$('rngRange').oninput = e => { scope.range = passband.range = settings.range = +e.target.value; saveSettings(); };
 $('selSpeed').onchange = e => { scope.speed = settings.speed = +e.target.value; saveSettings(); };
 
 const meters = [...document.querySelectorAll('canvas.meter')].map(c => new ArcMeter(c));

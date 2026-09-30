@@ -49,7 +49,7 @@ FTX Deck calls MAIN "VFO A" and SUB "VFO B" in the UI.
 | Preamp | `PA0n;` (HF/50) | 0 IPO, 1 AMP1, 2 AMP2. `PA1n;`/`PA2n;` for 144/430, 0/1 |
 | Attenuator | `RA0n;` | 0 off, 1 on (12 dB) |
 | Width | `SH00nn;` | code 00–23 (00 = default), table below |
-| IF shift | `IS0` + on + sign + `nnnn` e.g. `IS01+0200;` | ±1200 Hz |
+| IF shift | `IS00` + sign + `nnnn` e.g. `IS00+0200;` | ±1200 Hz, 20 Hz steps. P2 is fixed at `0` (Yaesu's manual; its own example is `IS00+1000;`). Hamlib sends P2 = `1` for "shift on", which the radio didn't act on |
 | Noise blanker | `NL0nnn;` | 000 = off, 001–010 |
 | DNR | `RL0nn;` | 00 = off, 01–10 |
 | DNF (auto notch) | `BC0n;` | 0/1 |
