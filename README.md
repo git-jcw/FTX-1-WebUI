@@ -166,3 +166,21 @@ against a real radio.
 Early: being pilot-tested on a real FTX-1, and tested throughout against the
 simulated radio. If something doesn't respond, **Diagnostics** shows every CAT
 command and reply; copy that into an issue.
+
+## Credits
+
+- The FTX-1 CAT protocol comes from Yaesu's *FTX-1 Series CAT Operation Reference
+  Manual*, with command behaviour and meter calibration cross-checked against the
+  open-source [Hamlib](https://github.com/Hamlib/Hamlib) FTX-1 backend.
+- Fonts: [IBM Plex Sans](https://github.com/IBM/plex) and
+  [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono), both under the SIL
+  Open Font License 1.1 (see `assets/fonts/`).
+
+## License
+
+MIT, see [LICENSE](LICENSE). The bundled fonts keep their own licence.
+
+FTX Deck is independent software. It is not affiliated with, endorsed by or
+supported by Yaesu Musen Co., Ltd. "Yaesu" and "FTX-1" are trademarks of their
+owner and are used here only to say which radio this works with. Use it at your
+own risk: you are responsible for what your station transmits.
