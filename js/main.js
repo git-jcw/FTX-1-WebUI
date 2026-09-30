@@ -501,6 +501,7 @@ function update() {
   $('pttSub').textContent = !live ? 'not connected' : s.tx ? (settings.latchPtt ? 'ON AIR · click to stop' : 'ON AIR') : settings.latchPtt ? 'click to transmit' : settings.spacePtt ? 'hold (or hold space)' : 'hold to talk';
   $('btnTune').classList.toggle('active', s.tuning);
   $('btnTune').textContent = s.tuning ? 'TUNING…' : 'TUNE';
+  if (pcMic && !audio.txReady) pcMic = false; // the TX path was torn down (e.g. the output device failed)
   $('tPcMic').setAttribute('aria-pressed', String(pcMic));
 
   for (const f of bindings) f();
@@ -508,6 +509,13 @@ function update() {
 }
 radio.addEventListener('change', update);
 audio.addEventListener('change', update);
+// Audio problems (a device that won't open, an output that can't be selected) go in the banner.
+let shownAudioError = null;
+audio.addEventListener('change', () => {
+  const err = audio.state.error;
+  if (err && err !== shownAudioError) banner(err, { error: true });
+  shownAudioError = err;
+});
 
 // ---------------- render loop ----------------
 function frame(now) {

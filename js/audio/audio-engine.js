@@ -180,8 +180,21 @@ export class AudioEngine extends EventTarget {
     this.micSource.connect(this.txGate).connect(this.txDest);
     this.txElement = new Audio();
     this.txElement.srcObject = this.txDest.stream;
-    if (this.txElement.setSinkId && this.state.radioOut) {
-      try { await this.txElement.setSinkId(this.state.radioOut); } catch (e) { this._patch({ error: `Radio audio output: ${e.message}` }); }
+    // The mic must reach the radio's USB output or nowhere: an audio element
+    // whose output can't be set plays on the default device, the PC speakers.
+    try {
+      if (!this.txElement.setSinkId) throw new Error('this browser can\'t choose an audio output device');
+      // Device IDs belong to each site and can change, so look the radio up
+      // again now, while the microphone is open and the device list is complete.
+      await this.refreshDevices();
+      if (!this.state.radioOut) throw new Error('no radio audio output (USB Audio CODEC) was found');
+      await this.txElement.setSinkId(this.state.radioOut);
+      if (this.txElement.sinkId !== this.state.radioOut) throw new Error('the browser didn\'t switch to it');
+    } catch (e) {
+      this.stopTxPath();
+      const msg = `Couldn't send the PC mic to the radio's USB audio output: ${e.message}. PC MIC has been left off. Check "Radio audio out" in Settings.`;
+      this._patch({ error: msg });
+      throw new Error(msg);
     }
     await this.txElement.play().catch(() => {});
     this._emit();
@@ -192,7 +205,7 @@ export class AudioEngine extends EventTarget {
     this.txElement?.pause();
     this.micStream?.getTracks().forEach(t => t.stop());
     this.micSource?.disconnect();
-    this.micStream = null; this.micSource = null; this.txElement = null; this.txGate = null;
+    this.micStream = null; this.micSource = null; this.micAnalyser = null; this.txElement = null; this.txGate = null; this.txDest = null;
   }
 
   get txReady() { return !!this.txGate; }
