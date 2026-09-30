@@ -451,7 +451,8 @@ its command: that means the radio refused it.
   until you reconnect.
 - **The single-file version can't list audio devices** when opened straight from
   disk, because the browser doesn't keep the microphone permission there. Use
-  the `http://localhost` version for now.
+  the hosted version at https://git-jcw.github.io/FTX-1-WebUI/ or the
+  `http://localhost` version instead.
 - **Some radio reports are unconfirmed.** A few readings (the PO and SWR meter
   scales in particular) come from documentation rather than measurements on a
   real radio. If something looks wrong, **Diagnostics → Copy** and report it.

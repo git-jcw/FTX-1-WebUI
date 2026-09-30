@@ -71,7 +71,12 @@ between transmissions on the PC even when the radio is quiet.
 
 ## Running it
 
-You need [Node.js](https://nodejs.org) 18 or newer, and Chrome or Edge.
+The easiest way: open **https://git-jcw.github.io/FTX-1-WebUI/** in Chrome or
+Edge. Nothing to install beyond the radio's USB driver. It's published from `main`
+by `.github/workflows/pages.yml` on every push.
+
+To run it from your own PC instead, you need [Node.js](https://nodejs.org) 18 or
+newer, and Chrome or Edge.
 
 ```bash
 npm start
@@ -98,7 +103,7 @@ needs no server and no internet connection.
 
 > **Known issue:** opened straight from disk, the browser doesn't keep the
 > microphone permission, so Settings can't list the audio devices and audio can't
-> start. Use `http://localhost` until that's fixed.
+> start. Use the hosted version or `http://localhost` instead.
 
 ## Connecting the radio
 
