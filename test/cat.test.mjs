@@ -474,3 +474,30 @@ test('the SSB passband drawing matches the widths measured on the radio', async 
   assert.deepEqual(at(2400, 200), { lo: 500, hi: 2900, bw: 2400 }, 'IF shift moves both edges');
   assert.deepEqual(passbandEdges({ mode: 'LSB', width: SSB_WIDTHS.indexOf(2700), shift: 0 }), { lo: 100, hi: 3000, bw: 2700 });
 });
+
+test('PC MIC refuses when Windows has the radio as its default communication device', async () => {
+  const devices = [
+    { kind: 'audioinput', deviceId: 'pcmic', label: 'Microphone (Anker Powerconf C200)' },
+    { kind: 'audioinput', deviceId: 'codec-in', label: 'Microphone (2- USB Audio Device) (0d8c:0016)' },
+    { kind: 'audiooutput', deviceId: 'default', label: 'Default - Speakers (Realtek(R) Audio)' },
+    { kind: 'audiooutput', deviceId: 'communications', label: 'Communications - Speakers (2- USB Audio Device) (0d8c:0016)' },
+    { kind: 'audiooutput', deviceId: 'speakers', label: 'Speakers (Realtek(R) Audio)' },
+    { kind: 'audiooutput', deviceId: 'codec-out', label: 'Speakers (2- USB Audio Device) (0d8c:0016)' },
+  ];
+  const stream = { getAudioTracks: () => [], getTracks: () => [] };
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { mediaDevices: {
+    enumerateDevices: async () => devices, getUserMedia: async () => stream } } });
+  try {
+    const { AudioEngine } = await import('../js/audio/audio-engine.js');
+    const a = new AudioEngine();
+    Object.assign(a.state, { radioIn: '', radioOut: '', speakers: '', mic: '' });
+    await assert.rejects(a.startTxPath(), /default communication device/);
+    assert.equal(a.txReady, false, 'PC MIC stays off');
+    assert.match(a.state.error, /Set as Default Communication Device/);
+    devices[3].label = 'Communications - Speakers (Realtek(R) Audio)';
+    await assert.rejects(a.startTxPath(), err => !/communication device/.test(err.message), 'with the speakers as the communication device it gets past this check');
+  } finally {
+    if (saved) Object.defineProperty(globalThis, 'navigator', saved); else delete globalThis.navigator;
+  }
+});

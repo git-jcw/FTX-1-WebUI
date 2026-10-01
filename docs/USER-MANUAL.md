@@ -455,6 +455,13 @@ its command: that means the radio refused it.
   disk, because the browser doesn't keep the microphone permission there. Use
   the hosted version at https://git-jcw.github.io/FTX-1-WebUI/ or the
   `http://localhost` version instead.
+- **The radio must not be Windows' "default communication device".** When it is,
+  Chrome, Edge and the FTX Deck app open it through that role, the open fails, and
+  the audio plays on your default speakers instead, so PC MIC refuses to start
+  and tells you. Fix: **Settings → System → Sound → More sound settings →
+  Playback**, right-click your PC speakers and choose **Set as Default
+  Communication Device**. Windows may switch it back to the radio when you replug
+  the USB cable.
 - **PC MIC needs the radio's audio output to itself.** If another program (WSJT-X,
   fldigi and the like) or another FTX Deck tab holds the radio's playback device,
   or Windows has it in exclusive mode, the browser can't open it and PC MIC turns

@@ -91,6 +91,30 @@ server and opens the browser for you.
 > won't load the app's separate script files from a `file://` page. For a
 > double-clickable copy, use the single-file build below.
 
+### Desktop app (Windows)
+
+**Download:** [latest release](https://github.com/git-jcw/FTX-1-WebUI/releases/latest),
+or the [newest build from `main`](https://github.com/git-jcw/FTX-1-WebUI/releases/tag/latest).
+Both are built by `.github/workflows/release.yml`: every push to `main` replaces
+the "Latest build (main)" pre-release, and a new `version` in `package.json`
+publishes a numbered release.
+
+To build it yourself:
+
+```bash
+npm install
+npm run app:package   # writes release/FTX-Deck-<version>-portable.exe
+```
+
+A single portable `.exe`: no install, just run it. It carries its own browser
+engine (Electron 43.7.3, Chromium 150), pinned so that browser updates can't
+change how audio reaches the radio. It grants the microphone, audio-output and
+serial permissions itself, and picks the radio's **Enhanced COM** port
+automatically. `npm run app` runs it from the source tree without packaging.
+
+The `.exe` isn't code-signed, so the first time Windows may show "Windows
+protected your PC": choose **More info → Run anyway**.
+
 ### Single-file build
 
 ```bash

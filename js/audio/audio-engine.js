@@ -13,6 +13,8 @@
 // "USB Audio CODEC" or "USB Audio Device"; Chrome adds its USB ID (0d8c:0016).
 const RADIO_LABEL = /usb audio codec|0d8c:0016|ftx|yaesu|burr-brown|pcm29/i;
 const MIC_OFF_DELAY_MS = 80; // lets the TX gate finish closing before the mic is muted
+const COMMS_DEVICE = 'Windows has the radio set as its "default communication device", and then the browser can’t send audio to it (it plays on your PC speakers instead). '
+  + 'Fix: Settings > System > Sound > More sound settings > Playback, right-click your PC speakers and choose "Set as Default Communication Device", then turn PC MIC on again';
 const TX_DEVICE_CHECK_MS = 300; // how long to wait for the radio's output to report a problem
 const DEVICE_BUSY = "the radio's audio output couldn't be opened. It may be in use by another program or another FTX Deck tab, or set to exclusive mode in Windows sound settings";
 // Chrome's entries that stand for "the operating system's current default".
@@ -186,6 +188,11 @@ export class AudioEngine extends EventTarget {
       // again now, while the microphone is open and the device list is complete.
       await this.refreshDevices();
       if (!this.state.radioOut) throw new Error('no radio audio output (USB Audio CODEC / USB Audio Device) was found');
+      // When Windows has the radio as its "default communication device",
+      // Chromium opens it through that role, the open fails, and it silently
+      // plays on the default device instead: the PC speakers.
+      const comms = this.state.outputs.find(o => o.id === 'communications');
+      if (comms && RADIO_LABEL.test(comms.label)) throw new Error(COMMS_DEVICE);
       const ctx = this.txCtx = new AudioContext({ latencyHint: 'interactive', sampleRate: 48000 });
       if (!ctx.setSinkId) throw new Error("this browser can't send audio to a chosen output device");
       // If the device can't be opened (in use by another program, exclusive mode,

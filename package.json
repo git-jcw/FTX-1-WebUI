@@ -1,20 +1,47 @@
 {
   "name": "ftx-deck",
   "version": "0.1.0",
-  "description": "Browser control console for the Yaesu FTX-1: CAT control, USB audio, audio waterfall and meters.",
+  "description": "Control console for the Yaesu FTX-1: CAT control, USB audio, audio waterfall and meters.",
+  "author": "James W. (git-jcw)",
   "type": "module",
   "private": true,
   "license": "MIT",
+  "main": "electron/main.cjs",
   "scripts": {
     "start": "node scripts/serve.mjs",
     "build": "node scripts/build.mjs",
     "screenshots": "node scripts/build.mjs && node scripts/screenshots.mjs",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "app": "node scripts/build.mjs && node scripts/run-app.mjs",
+    "app:package": "node scripts/build.mjs && electron-builder --win portable"
   },
   "engines": {
     "node": ">=18"
   },
   "devDependencies": {
+    "electron": "43.7.3",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2"
+  },
+  "build": {
+    "appId": "io.github.git-jcw.ftxdeck",
+    "productName": "FTX Deck",
+    "copyright": "Copyright (c) 2026 James W. (git-jcw)",
+    "files": [
+      "electron/**",
+      "dist/ftx-deck.html",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": "portable",
+      "icon": "build/icon.png"
+    },
+    "portable": {
+      "artifactName": "FTX-Deck-${version}-portable.exe"
+    }
   }
 }

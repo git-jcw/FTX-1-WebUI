@@ -1,0 +1,68 @@
+# Builds the Windows desktop app on every push to main and publishes the .exe
+# as a GitHub Release asset:
+#   - "Latest build (main)" (tag: latest): a pre-release, replaced on every push.
+#   - "FTX Deck <version>" (tag: v<version>): created once, the first time main
+#     builds a new "version" from package.json. Bump the version to publish one.
+
+name: Build desktop app
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write # to create releases and upload the .exe
+
+concurrency:
+  group: release
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30 # a failing test can leave the simulated radio polling, so don't wait forever
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Build the portable .exe
+        run: npm run app:package -- --publish never
+      - name: Find the .exe
+        id: exe
+        run: |
+          file=$(ls release/*-portable.exe | head -n 1)
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          ls -la "$file"
+
+      - name: Publish "Latest build (main)"
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest "${{ steps.exe.outputs.file }}" \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "Latest build (main)" \
+            --notes "Built automatically from \`main\` at ${GITHUB_SHA::7}. Replaced on every push to main.
+
+          Download **$(basename "${{ steps.exe.outputs.file }}")**, then run it. There's nothing to install. The first time, Windows may say \"Windows protected your PC\" because the app isn't code-signed: choose **More info → Run anyway**."
+
+      - name: Publish the version release, if it's new
+        run: |
+          tag="v${{ steps.exe.outputs.version }}"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "$tag already released; bump \"version\" in package.json to publish a new one."
+          else
+            gh release create "$tag" "${{ steps.exe.outputs.file }}" \
+              --target "$GITHUB_SHA" --latest \
+              --title "FTX Deck ${{ steps.exe.outputs.version }}" \
+              --generate-notes
+          fi
