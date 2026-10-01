@@ -15,9 +15,9 @@ import { THEMES, applyTheme } from './ui/theme.js';
 const $ = id => document.getElementById(id);
 const radio = new RadioService();
 const audio = new AudioEngine();
-window.ftx = { radio, audio }; // handy from the browser console
+window.ftx = { radio, audio }; // handy from the developer console (Ctrl+Shift+I)
 
-// ---------------- settings (per browser) ----------------
+// ---------------- settings (saved on this PC) ----------------
 const SETTINGS_KEY = 'ftxdeck.settings.v1';
 const settings = Object.assign({ baud: 38400, tot: 180, license: 'general', spacePtt: false, latchPtt: false, theme: 'shack', autoTune: false, autoTuneDelay: 3, step: 100, vfoView: 'auto', span: 8000, floor: -112, range: 62, speed: 2 },
   (() => { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch { return {}; } })());
@@ -45,7 +45,7 @@ function banner(text, { error = false } = {}) {
 $('btnConnect').onclick = async () => {
   if (radio.state.connected && !radio.state.demo) { await radio.disconnect(); await stopAllAudio(); return; }
   if (!WebSerialTransport.supported()) {
-    banner('This browser can\'t reach USB serial ports. Use Chrome or Edge on Windows, macOS or Linux.', { error: true });
+    banner('USB serial ports aren\'t available here. Run FTX Deck as the desktop app.', { error: true });
     return;
   }
   try {
@@ -88,7 +88,7 @@ $('btnDemo').onclick = async () => {
 };
 
 async function startAudio() {
-  if (!AudioEngine.supported()) { banner('Audio needs Chrome or Edge.', { error: true }); return; }
+  if (!AudioEngine.supported()) { banner('Audio isn\'t available here. Run FTX Deck as the desktop app.', { error: true }); return; }
   await audio.refreshDevices({ askPermission: true });
   if (!audio.state.radioIn) {
     banner('No input named "USB Audio CODEC" found — pick the radio\'s audio input in Settings.', { error: true });

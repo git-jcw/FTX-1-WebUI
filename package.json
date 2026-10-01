@@ -1,6 +1,6 @@
 {
   "name": "ftx-deck",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Control console for the Yaesu FTX-1: CAT control, USB audio, audio waterfall and meters.",
   "author": "James W. (git-jcw)",
   "type": "module",
@@ -8,7 +8,7 @@
   "license": "MIT",
   "main": "electron/main.cjs",
   "scripts": {
-    "start": "node scripts/serve.mjs",
+    "start": "node scripts/build.mjs && node scripts/run-app.mjs",
     "build": "node scripts/build.mjs",
     "screenshots": "node scripts/build.mjs && node scripts/screenshots.mjs",
     "test": "node --test test/*.test.mjs",

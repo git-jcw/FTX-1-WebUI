@@ -1,5 +1,5 @@
 // Builds FTX Deck into one self-contained HTML file: scripts bundled, styles,
-// fonts and icon inlined. Open it straight from disk in Chrome or Edge.
+// fonts and icon inlined. The desktop app (electron/main.cjs) loads this file.
 //   node scripts/build.mjs   ->  dist/ftx-deck.html
 
 import { build } from 'esbuild';

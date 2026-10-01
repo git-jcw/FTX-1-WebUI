@@ -2,15 +2,9 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "FTX Deck: serve",
+      "label": "FTX Deck: build",
       "type": "shell",
-      "command": "node scripts/serve.mjs",
-      "isBackground": true,
-      "problemMatcher": {
-        "owner": "ftx-deck",
-        "pattern": { "regexp": "^__never__$" },
-        "background": { "activesBegin": true, "beginsPattern": ".", "endsPattern": "FTX Deck running at" }
-      }
+      "command": "npm run build"
     },
     {
       "label": "FTX Deck: test",

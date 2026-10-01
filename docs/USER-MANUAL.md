@@ -1,9 +1,9 @@
 # FTX Deck user manual
 
-FTX Deck controls a Yaesu FTX-1 (Field head, or Optima with the SPA-1) from Chrome
-or Edge over the radio's USB cable. This manual goes through every part of the
-screen, one area at a time. For installing and running FTX Deck, see the
-[README](../README.md).
+FTX Deck is a Windows app that controls a Yaesu FTX-1 (Field head, or Optima with
+the SPA-1) over the radio's USB cable. This manual goes through every part of the
+screen, one area at a time. For downloading FTX Deck, see the
+[README](../README.md#getting-it).
 
 ![The FTX Deck screen](screenshots/shack.png)
 
@@ -31,8 +31,10 @@ screen, one area at a time. For installing and running FTX Deck, see the
 
 - **A Yaesu FTX-1** (Field head, or Optima), connected to the PC with a USB
   cable from the radio's **side-panel USB jack**.
-- **Chrome or Edge** on a desktop or laptop (Windows, macOS or Linux). Other
-  browsers can't reach USB serial ports.
+- **A Windows 10 or 11 PC**, and the FTX Deck app: one `.exe`, nothing to install
+  ([download](https://github.com/git-jcw/FTX-1-WebUI/releases/latest)). The first
+  time, Windows may say "Windows protected your PC" because the app isn't
+  code-signed: choose **More info → Run anyway**.
 - **The radio's USB driver (Silicon Labs CP210x virtual COM port driver).**
   Without it the radio's COM ports don't appear and FTX Deck can't connect.
 
@@ -52,16 +54,19 @@ screen, one area at a time. For installing and running FTX Deck, see the
 Yaesu's [Virtual COM Port Driver Installation Manual](https://www.yaesu.com/Files/BB2B47AE-1018-01AF-FAE48FDCB1919193/USB_Driver_Installation_Manual_ENG_2205-E.pdf)
 (PDF) goes through the same steps with pictures.
 
-**macOS and Linux:** Linux includes the CP210x driver, so the ports appear
-without installing anything. On macOS, if the radio's ports don't appear, install
-the driver from [Silicon Labs' CP210x driver page](https://www.silabs.com/software-and-tools/usb-to-uart-bridge-vcp-drivers?tab=downloads).
+If Yaesu's download is ever unavailable, the same driver is on
+[Silicon Labs' CP210x driver page](https://www.silabs.com/software-and-tools/usb-to-uart-bridge-vcp-drivers?tab=downloads).
 
 **Audio needs no driver.** The radio's sound device, named **USB Audio CODEC** or
 **USB Audio Device** (with the USB ID 0d8c:0016), uses
 the operating system's built-in USB audio support. Look for it under
 **Sound, video and game controllers** in Device Manager.
 
-For how to start FTX Deck itself, see the [README](../README.md#running-it).
+**Keep your PC speakers as Windows' default communication device**, not the
+radio (Settings → System → Sound → More sound settings → Playback, right-click the
+speakers → **Set as Default Communication Device**). When the radio is the
+communication device, audio meant for it plays on your speakers instead; see
+[Known limitations](#known-limitations).
 
 ---
 
@@ -79,9 +84,9 @@ For how to start FTX Deck itself, see the [README](../README.md#running-it).
 - **The radio and the app stay in sync both ways.** Change something on the
   radio and the app follows within a second or two; change it in the app and
   the radio follows.
-- **Your settings are kept in this browser**, not in the radio: theme, tuning
-  step, spectrum settings, audio devices and the rest. A different browser or PC
-  starts with the defaults.
+- **Your settings are kept on this PC**, not in the radio: theme, tuning step,
+  spectrum settings, audio devices and the rest. Another PC starts with the
+  defaults.
 
 ---
 
@@ -89,11 +94,11 @@ For how to start FTX Deck itself, see the [README](../README.md#running-it).
 
 | Control | What it does |
 |---|---|
-| **Connect radio** | Opens the browser's port picker. Choose the radio's **Enhanced COM** port. Once connected, the app reads every setting from the radio, starts the receive audio, and the button changes to **Disconnect**. |
+| **Connect radio** | Connects to the radio's **Enhanced COM** port, which FTX Deck picks automatically. If it can't tell which port that is, it asks you to choose; pick the Enhanced one, not the Standard one. Once connected, the app reads every setting from the radio, starts the receive audio, and the button changes to **Disconnect**. |
 | **Disconnect** | Closes the link to the radio, stops the receive audio, turns **PC MIC** off and clears the waterfall. If you were transmitting, it unkeys first. |
 | **Demo** | Starts demo mode: a simulated FTX-1 Optima and a synthetic band with CW, voice and FT8-like signals. Every control works, and nothing is sent to a real radio. The PC speakers start muted; press **M** under Receive levels to listen. Unavailable while a real radio is connected. |
 | **Exit demo** | Leaves demo mode and restores your speaker mute setting. |
-| **Start audio / Stop audio** | Starts or stops the radio's receive audio on the PC: the sound from your speakers, the spectrum, the waterfall and the oscilloscope. Connecting starts it for you. The first time, the browser asks for microphone permission, which is how a web page reads a sound input. |
+| **Start audio / Stop audio** | Starts or stops the radio's receive audio on the PC: the sound from your speakers, the spectrum, the waterfall and the oscilloscope. Connecting starts it for you. |
 | **CAT** indicator | The control link: **offline**, **connecting…**, **connected**, or **demo**. Green means working; amber means connected with a warning. |
 | **Audio** indicator | The receive audio: **off**, **on**, or **demo**. Red means an audio error; the message appears in the banner. |
 | **Configuration** indicator | Appears once connected, for example **Optima · 100 W max** or **Field head · 10 W max**. Shows which configuration the radio reports and the highest power allowed on the current band and mode. It updates if you fit or remove the SPA-1 while connected. |
@@ -323,8 +328,8 @@ to run.
   lands in the middle of a contact.
 - It only runs on HF and 6 m, and only once per frequency, even if the radio
   refuses. Pressing TUNE yourself also counts.
-- It doesn't run while the browser tab is hidden; you get the full delay when
-  you come back.
+- It doesn't run while FTX Deck is minimised; you get the full delay when you
+  bring it back.
 - It follows your transmit frequency, so with split on it watches VFO B. It
   also reacts to tuning on the radio itself.
 - Each auto tune is a short transmission, so only use it where you're happy for
@@ -336,8 +341,8 @@ FTX Deck unkeys the radio when any of these happens:
 
 - the **Transmit timeout** set in Settings runs out (3 minutes by default);
 - you press **Esc**;
-- the browser window loses focus (unless PTT latching is on in Settings);
-- the tab is hidden, or the page is closed or reloaded;
+- the FTX Deck window loses focus (unless PTT latching is on in Settings);
+- the window is minimised or closed;
 - the connection to the radio drops.
 
 ---
@@ -373,7 +378,7 @@ closes the window.
 | **Radio audio out (transmit)** | The radio's audio output on the PC: **USB Audio CODEC**, or **Speakers (USB Audio Device) (0d8c:0016)**. Used by PC MIC. |
 | **PC speakers** | Where the receive audio plays. |
 | **PC microphone** | The microphone PC MIC sends to the radio. |
-| **Refresh device list** | Re-reads the list of sound devices, for example after plugging something in. The browser may ask for microphone permission. |
+| **Refresh device list** | Re-reads the list of sound devices, for example after plugging something in. |
 
 ### Safety
 
@@ -451,21 +456,17 @@ its command: that means the radio refused it.
 - **Battery detection on the Field head is indirect.** The app assumes 13.8 V
   (10 W) until the radio refuses a setting above 6 W, then limits Power to 6 W
   until you reconnect.
-- **The single-file version can't list audio devices** when opened straight from
-  disk, because the browser doesn't keep the microphone permission there. Use
-  the hosted version at https://git-jcw.github.io/FTX-1-WebUI/ or the
-  `http://localhost` version instead.
 - **The radio must not be Windows' "default communication device".** When it is,
-  Chrome, Edge and the FTX Deck app open it through that role, the open fails, and
+  FTX Deck opens it through that role, the open fails, and
   the audio plays on your default speakers instead, so PC MIC refuses to start
   and tells you. Fix: **Settings → System → Sound → More sound settings →
   Playback**, right-click your PC speakers and choose **Set as Default
   Communication Device**. Windows may switch it back to the radio when you replug
   the USB cable.
 - **PC MIC needs the radio's audio output to itself.** If another program (WSJT-X,
-  fldigi and the like) or another FTX Deck tab holds the radio's playback device,
-  or Windows has it in exclusive mode, the browser can't open it and PC MIC turns
-  itself off with a message. Close the other program or tab, or in Windows open
+  fldigi and the like) holds the radio's playback device, or Windows has it in
+  exclusive mode, FTX Deck can't open it and PC MIC turns itself off with a
+  message. Close the other program, or in Windows open
   **Sound settings → More sound settings → Playback → the radio's Speakers →
   Properties → Advanced**, untick **Allow applications to take exclusive
   control**, and set the format to **16 bit, 48000 Hz**.
